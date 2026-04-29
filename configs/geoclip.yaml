@@ -1,0 +1,52 @@
+# =============================================================================
+# geoclip.yaml — flat-конфіг для train.py / TrainConfig
+# Архітектура: CLIP ViT + RandomFourierGPSEncoder, InfoNCE контрастивне навчання
+# =============================================================================
+
+# ── Дані ─────────────────────────────────────────────────────────────────────
+manifest_path:      "data/manifest.csv"
+image_root:         "data/images"
+countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
+quality_threshold:  0.4
+split_method:       "h3"
+img_size:           224            # CLIP ViT очікує 224px
+
+# ── Архітектура ──────────────────────────────────────────────────────────────
+architecture:       "geoclip"
+pretrained:         true
+
+# ── Стадія 1: Навчання GPS-енкодера + голови, CLIP заморожено ────────────────
+stage1_epochs:      12
+stage1_lr:          0.0005
+stage1_unfreeze_n:  0
+
+# ── Стадія 2: Розморожування останніх блоків CLIP ────────────────────────────
+stage2_epochs:      18
+stage2_lr:          0.000005        # дуже низький lr для CLIP backbone
+stage2_unfreeze_n:  4                # кількість transformer блоків ViT для розморожування
+
+# ── Оптимізатор / регуляризація ──────────────────────────────────────────────
+weight_decay:       0.01
+batch_size:         32               # контрастивний loss виграє від більшого батчу
+num_workers:        4
+grad_clip:          1.0
+
+# ── Early stopping ───────────────────────────────────────────────────────────
+patience:           10
+min_delta:          0.0001
+
+# ── Логування ────────────────────────────────────────────────────────────────
+use_wandb:          false
+use_mlflow:         false
+wandb_project:      "ua-street-geolocation"
+wandb_run_name:     "geoclip-contrastive"
+mlflow_uri:         "mlruns"
+experiment_name:    "geolocation-geoclip"
+
+# ── Збереження ───────────────────────────────────────────────────────────────
+checkpoint_dir:     "checkpoints/geoclip"
+save_top_k:         3
+
+# ── Відтворюваність ──────────────────────────────────────────────────────────
+seed:               42
+mixed_precision:    true

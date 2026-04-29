@@ -1,0 +1,52 @@
+# =============================================================================
+# baseline.yaml — flat-конфіг для train.py / TrainConfig
+# Архітектура: EfficientNet-B2 + кастомна голова класифікатора
+# =============================================================================
+
+# ── Дані ─────────────────────────────────────────────────────────────────────
+manifest_path:      "data/manifest.csv"
+image_root:         "data/images"
+countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
+quality_threshold:  0.4
+split_method:       "h3"          # 'h3' або 'kmeans'
+img_size:           260           # нативна роздільна здатність EfficientNet-B2
+
+# ── Архітектура ──────────────────────────────────────────────────────────────
+architecture:       "baseline"
+pretrained:         true
+
+# ── Стадія 1: Заморожений backbone ───────────────────────────────────────────
+stage1_epochs:      10
+stage1_lr:          0.001
+stage1_unfreeze_n:  0
+
+# ── Стадія 2: Тонке налаштування останніх блоків ─────────────────────────────
+stage2_epochs:      20
+stage2_lr:          0.0001
+stage2_unfreeze_n:  3             # кількість блоків EfficientNet для розморожування
+
+# ── Оптимізатор / регуляризація ──────────────────────────────────────────────
+weight_decay:       0.01
+batch_size:         32
+num_workers:        4
+grad_clip:          1.0
+
+# ── Early stopping ───────────────────────────────────────────────────────────
+patience:           7
+min_delta:          0.0001
+
+# ── Логування ────────────────────────────────────────────────────────────────
+use_wandb:          false
+use_mlflow:         false
+wandb_project:      "ua-street-geolocation"
+wandb_run_name:     "baseline-efficientnet-b2"
+mlflow_uri:         "mlruns"
+experiment_name:    "geolocation-baseline"
+
+# ── Збереження ───────────────────────────────────────────────────────────────
+checkpoint_dir:     "checkpoints/baseline"
+save_top_k:         3
+
+# ── Відтворюваність ──────────────────────────────────────────────────────────
+seed:               42
+mixed_precision:    true

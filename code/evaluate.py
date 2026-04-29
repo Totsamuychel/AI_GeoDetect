@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 def load_checkpoint(
     checkpoint_path: str,
     device: torch.device,
-) -> tuple[torch.nn.Module, list[str], dict]:
+) -> tuple[torch.nn.Module, list[str], dict, dict]:
     """
     Завантажує модель із чекпоінту.
 
@@ -65,7 +65,8 @@ def load_checkpoint(
         device:          Пристрій для завантаження.
 
     Повертає:
-        Кортеж (model, class_names, config).
+        Кортеж (model, class_names, config, checkpoint_meta), де
+        checkpoint_meta — словник з полями 'epoch', 'val_loss', 'val_acc'.
     """
     path = Path(checkpoint_path)
     if not path.exists():
@@ -96,7 +97,15 @@ def load_checkpoint(
     model = model.to(device)
     model.eval()
 
-    return model, class_names, config
+    # Повертаємо легкі метадані (без model_state) щоб уникнути повторного
+    # завантаження чекпоінту з диску наприкінці evaluate().
+    meta = {
+        "epoch":    checkpoint.get("epoch"),
+        "val_loss": checkpoint.get("val_loss"),
+        "val_acc":  checkpoint.get("val_acc"),
+    }
+
+    return model, class_names, config, meta
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -174,7 +183,7 @@ def evaluate(
     device = get_device()
 
     # ── Завантаження моделі ───────────────────────────────────────────────────
-    model, class_names, config = load_checkpoint(checkpoint_path, device)
+    model, class_names, config, ckpt_meta = load_checkpoint(checkpoint_path, device)
     architecture = config.get("architecture", "baseline")
     num_classes  = len(class_names)
 
@@ -231,7 +240,7 @@ def evaluate(
 
     model.eval()
     with torch.no_grad():
-        for images, labels, coords_tuple in test_loader:
+        for images, labels, coords in test_loader:
             images = images.to(device, non_blocking=True)
 
             if architecture == "geoclip":
@@ -243,9 +252,8 @@ def evaluate(
             # Передбачені координати = центр передбаченого міста
             pred_indices = logits.argmax(dim=1).cpu().numpy()
             pred_coords  = _indices_to_coords(pred_indices, class_names, test_dataset)
-            true_lats = np.array([c[0] for c in coords_tuple[0]])
-            true_lons = np.array([c[1] for c in coords_tuple[1]])
-            true_coords = np.stack([true_lats, true_lons], axis=1)
+            # coords — тензор форми (N, 2) у форматі [lat, lon]
+            true_coords = coords.cpu().numpy().astype(np.float64)
 
             all_logits.append(logits.cpu())
             all_labels.append(labels)
@@ -314,7 +322,6 @@ def evaluate(
     logger.info("\n" + per_class_df.to_string(index=False))
 
     # ── Збереження результатів ────────────────────────────────────────────────
-    checkpoint_obj = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     result = EvalResult(
         checkpoint_path=str(checkpoint_path),
         architecture=architecture,
@@ -333,8 +340,8 @@ def evaluate(
         mean_geoscore=mean_score,
         median_geoscore=median_score,
         per_class_accuracy={k: {"accuracy": v[0], "count": v[1]} for k, v in per_class_acc.items()},
-        val_loss_from_ckpt=checkpoint_obj.get("val_loss"),
-        val_acc_from_ckpt=checkpoint_obj.get("val_acc"),
+        val_loss_from_ckpt=ckpt_meta.get("val_loss"),
+        val_acc_from_ckpt=ckpt_meta.get("val_acc"),
     )
 
     if output_path:

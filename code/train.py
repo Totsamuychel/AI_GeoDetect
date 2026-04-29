@@ -250,10 +250,8 @@ class CheckpointManager:
                 worst_path.unlink()
                 logger.debug(f"Видалено старий чекпоінт: {worst_path.name}")
 
-        # Символічне посилання на найкращий чекпоінт
+        # Копія найкращого чекпоінту у фіксований файл best_model.pth
         best_path = self.checkpoint_dir / "best_model.pth"
-        best_actual = self._checkpoints[0][1] if self.mode == "min" else self._checkpoints[-1][1]
-        # Для 'min' найкращий — з найменшим loss, тобто в кінці після sort(reverse=False)
         best_checkpoint = min(self._checkpoints, key=lambda x: x[0]) if self.mode == "min" \
                           else max(self._checkpoints, key=lambda x: x[0])
         if best_checkpoint[1].exists():
@@ -404,15 +402,13 @@ def train_one_epoch(
     total_correct = 0
     total_samples = 0
 
-    for batch_idx, (images, labels, coords_tuple) in enumerate(loader):
+    for batch_idx, (images, labels, coords) in enumerate(loader):
         images = images.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
 
-        # Для GeoCLIP потрібні координати
+        # Для GeoCLIP потрібні координати; GeoDataset вже повертає тензор (N, 2).
         if architecture == "geoclip":
-            lat = torch.tensor([c[0] for c in coords_tuple[0]], dtype=torch.float32)
-            lon = torch.tensor([c[1] for c in coords_tuple[1]], dtype=torch.float32)
-            coords = torch.stack([lat, lon], dim=1).to(device, non_blocking=True)
+            coords = coords.to(device, non_blocking=True).float()
         else:
             coords = None
 
@@ -483,7 +479,7 @@ def validate(
     all_logits = []
     all_labels = []
 
-    for images, labels, coords_tuple in loader:
+    for images, labels, _coords in loader:
         images = images.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
 

@@ -1,0 +1,52 @@
+# =============================================================================
+# streetclip.yaml — flat-конфіг для train.py / TrainConfig
+# Архітектура: geolocal/StreetCLIP (CLIP ViT-L/14) + лінійний пробник
+# =============================================================================
+
+# ── Дані ─────────────────────────────────────────────────────────────────────
+manifest_path:      "data/manifest.csv"
+image_root:         "data/images"
+countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
+quality_threshold:  0.4
+split_method:       "h3"
+img_size:           224            # StreetCLIP / CLIP ViT очікує 224px
+
+# ── Архітектура ──────────────────────────────────────────────────────────────
+architecture:       "streetclip"
+pretrained:         true
+
+# ── Стадія 1: Лінійний пробник над замороженим CLIP ──────────────────────────
+stage1_epochs:      8
+stage1_lr:          0.0005
+stage1_unfreeze_n:  0
+
+# ── Стадія 2: Розморожування останніх ViT-шарів ──────────────────────────────
+stage2_epochs:      15
+stage2_lr:          0.00002         # дуже консервативний lr для CLIP backbone
+stage2_unfreeze_n:  2                # кількість ViT encoder layers для розморожування
+
+# ── Оптимізатор / регуляризація ──────────────────────────────────────────────
+weight_decay:       0.01
+batch_size:         32
+num_workers:        4
+grad_clip:          1.0
+
+# ── Early stopping ───────────────────────────────────────────────────────────
+patience:           8
+min_delta:          0.0001
+
+# ── Логування ────────────────────────────────────────────────────────────────
+use_wandb:          false
+use_mlflow:         false
+wandb_project:      "ua-street-geolocation"
+wandb_run_name:     "streetclip-linearprobe"
+mlflow_uri:         "mlruns"
+experiment_name:    "geolocation-streetclip"
+
+# ── Збереження ───────────────────────────────────────────────────────────────
+checkpoint_dir:     "checkpoints/streetclip"
+save_top_k:         3
+
+# ── Відтворюваність ──────────────────────────────────────────────────────────
+seed:               42
+mixed_precision:    true

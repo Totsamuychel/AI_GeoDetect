@@ -1,0 +1,101 @@
+image_id,filepath,lat,lon,country,region,city,source,capture_date,quality_score
+sample_0000,images/UA/Kyiv/0000.jpg,50.442895,30.514755,UA,Kyiv Oblast,Kyiv,osv5m,2023-04-08,0.484
+sample_0001,images/UA/Kyiv/0001.jpg,50.515794,30.572721,UA,Kyiv Oblast,Kyiv,mapillary,2023-10-14,0.419
+sample_0002,images/UA/Kyiv/0002.jpg,50.480363,30.543606,UA,Kyiv Oblast,Kyiv,mapillary,2023-09-07,0.83
+sample_0003,images/UA/Kyiv/0003.jpg,50.434399,30.473671,UA,Kyiv Oblast,Kyiv,osv5m,2023-10-09,0.886
+sample_0004,images/UA/Kyiv/0004.jpg,50.54055,30.527095,UA,Kyiv Oblast,Kyiv,osv5m,2023-06-09,0.493
+sample_0005,images/UA/Kyiv/0005.jpg,50.49377,30.511369,UA,Kyiv Oblast,Kyiv,mapillary,2023-07-04,0.615
+sample_0006,images/UA/Kyiv/0006.jpg,50.428283,30.55596,UA,Kyiv Oblast,Kyiv,mapillary,2023-12-15,0.722
+sample_0007,images/UA/Kyiv/0007.jpg,50.498174,30.515201,UA,Kyiv Oblast,Kyiv,osv5m,2023-11-20,0.931
+sample_0008,images/UA/Kyiv/0008.jpg,50.429014,30.548362,UA,Kyiv Oblast,Kyiv,mapillary,2023-01-22,0.537
+sample_0009,images/UA/Kyiv/0009.jpg,50.445105,30.543169,UA,Kyiv Oblast,Kyiv,mapillary,2023-02-13,0.567
+sample_0010,images/UA/Kyiv/0010.jpg,50.418751,30.487531,UA,Kyiv Oblast,Kyiv,osv5m,2023-06-07,0.802
+sample_0011,images/UA/Kyiv/0011.jpg,50.427488,30.451001,UA,Kyiv Oblast,Kyiv,mapillary,2023-10-21,0.503
+sample_0012,images/UA/Lviv/0012.jpg,49.835794,24.000089,UA,Lviv Oblast,Lviv,osv5m,2023-05-21,0.813
+sample_0013,images/UA/Lviv/0013.jpg,49.848101,24.073166,UA,Lviv Oblast,Lviv,mapillary,2023-04-27,0.419
+sample_0014,images/UA/Lviv/0014.jpg,49.82392,24.065882,UA,Lviv Oblast,Lviv,mapillary,2023-10-23,0.589
+sample_0015,images/UA/Lviv/0015.jpg,49.81161,23.988121,UA,Lviv Oblast,Lviv,osv5m,2023-03-09,0.484
+sample_0016,images/UA/Lviv/0016.jpg,49.837741,23.967509,UA,Lviv Oblast,Lviv,osv5m,2023-10-13,0.617
+sample_0017,images/UA/Lviv/0017.jpg,49.86698,24.029242,UA,Lviv Oblast,Lviv,osv5m,2023-02-25,0.428
+sample_0018,images/UA/Lviv/0018.jpg,49.893937,24.074368,UA,Lviv Oblast,Lviv,osv5m,2023-10-03,0.631
+sample_0019,images/UA/Lviv/0019.jpg,49.793413,23.997864,UA,Lviv Oblast,Lviv,osv5m,2023-09-28,0.965
+sample_0020,images/UA/Lviv/0020.jpg,49.829238,24.007365,UA,Lviv Oblast,Lviv,osv5m,2023-11-11,0.467
+sample_0021,images/UA/Lviv/0021.jpg,49.789271,24.051611,UA,Lviv Oblast,Lviv,osv5m,2023-09-25,0.507
+sample_0022,images/UA/Lviv/0022.jpg,49.925944,23.976945,UA,Lviv Oblast,Lviv,osv5m,2023-11-17,0.765
+sample_0023,images/UA/Lviv/0023.jpg,49.888303,24.099169,UA,Lviv Oblast,Lviv,mapillary,2023-10-11,0.693
+sample_0024,images/UA/Odesa/0024.jpg,46.51873,30.753995,UA,Odesa Oblast,Odesa,osv5m,2023-04-02,0.545
+sample_0025,images/UA/Odesa/0025.jpg,46.464034,30.714982,UA,Odesa Oblast,Odesa,osv5m,2023-02-25,0.72
+sample_0026,images/UA/Odesa/0026.jpg,46.534167,30.775463,UA,Odesa Oblast,Odesa,mapillary,2023-05-17,0.923
+sample_0027,images/UA/Odesa/0027.jpg,46.451949,30.73932,UA,Odesa Oblast,Odesa,mapillary,2023-12-10,0.639
+sample_0028,images/UA/Odesa/0028.jpg,46.459659,30.680689,UA,Odesa Oblast,Odesa,osv5m,2023-02-08,0.535
+sample_0029,images/UA/Odesa/0029.jpg,46.447486,30.779969,UA,Odesa Oblast,Odesa,mapillary,2023-10-08,0.404
+sample_0030,images/UA/Odesa/0030.jpg,46.47794,30.706489,UA,Odesa Oblast,Odesa,mapillary,2023-01-28,0.598
+sample_0031,images/UA/Odesa/0031.jpg,46.442262,30.719712,UA,Odesa Oblast,Odesa,osv5m,2023-04-18,0.479
+sample_0032,images/UA/Odesa/0032.jpg,46.542287,30.697657,UA,Odesa Oblast,Odesa,osv5m,2023-04-26,0.684
+sample_0033,images/UA/Odesa/0033.jpg,46.463931,30.735571,UA,Odesa Oblast,Odesa,osv5m,2023-06-14,0.647
+sample_0034,images/UA/Odesa/0034.jpg,46.493444,30.710702,UA,Odesa Oblast,Odesa,mapillary,2023-01-13,0.837
+sample_0035,images/UA/Odesa/0035.jpg,46.490018,30.700452,UA,Odesa Oblast,Odesa,mapillary,2023-04-18,0.669
+sample_0036,images/UA/Kharkiv/0036.jpg,49.957867,36.249445,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-02-15,0.885
+sample_0037,images/UA/Kharkiv/0037.jpg,50.00752,36.21255,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-02-25,0.909
+sample_0038,images/UA/Kharkiv/0038.jpg,50.022439,36.280267,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-07-02,0.499
+sample_0039,images/UA/Kharkiv/0039.jpg,50.043244,36.231074,UA,Kharkiv Oblast,Kharkiv,osv5m,2023-05-14,0.818
+sample_0040,images/UA/Kharkiv/0040.jpg,49.982815,36.143605,UA,Kharkiv Oblast,Kharkiv,osv5m,2023-03-07,0.578
+sample_0041,images/UA/Kharkiv/0041.jpg,50.058018,36.217549,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-12-11,0.434
+sample_0042,images/UA/Kharkiv/0042.jpg,49.942464,36.200572,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-01-17,0.448
+sample_0043,images/UA/Kharkiv/0043.jpg,50.01988,36.292238,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-07-04,0.965
+sample_0044,images/UA/Kharkiv/0044.jpg,49.93394,36.202521,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-10-03,0.652
+sample_0045,images/UA/Kharkiv/0045.jpg,49.940894,36.199879,UA,Kharkiv Oblast,Kharkiv,osv5m,2023-04-22,0.83
+sample_0046,images/UA/Kharkiv/0046.jpg,49.997065,36.280464,UA,Kharkiv Oblast,Kharkiv,osv5m,2023-08-11,0.957
+sample_0047,images/UA/Kharkiv/0047.jpg,49.999791,36.227712,UA,Kharkiv Oblast,Kharkiv,mapillary,2023-02-18,0.528
+sample_0048,images/UA/Dnipro/0048.jpg,48.453606,35.162009,UA,Dnipro Oblast,Dnipro,mapillary,2023-04-12,0.571
+sample_0049,images/UA/Dnipro/0049.jpg,48.40677,35.069904,UA,Dnipro Oblast,Dnipro,osv5m,2023-10-26,0.792
+sample_0050,images/UA/Dnipro/0050.jpg,48.556753,35.050728,UA,Dnipro Oblast,Dnipro,osv5m,2023-11-04,0.963
+sample_0051,images/UA/Dnipro/0051.jpg,48.481159,35.064703,UA,Dnipro Oblast,Dnipro,mapillary,2023-12-18,0.493
+sample_0052,images/UA/Dnipro/0052.jpg,48.457884,35.079907,UA,Dnipro Oblast,Dnipro,osv5m,2023-04-22,0.781
+sample_0053,images/UA/Dnipro/0053.jpg,48.459619,35.103876,UA,Dnipro Oblast,Dnipro,mapillary,2023-02-21,0.654
+sample_0054,images/UA/Dnipro/0054.jpg,48.463997,35.050355,UA,Dnipro Oblast,Dnipro,mapillary,2023-11-09,0.497
+sample_0055,images/UA/Dnipro/0055.jpg,48.391664,35.074147,UA,Dnipro Oblast,Dnipro,mapillary,2023-02-03,0.967
+sample_0056,images/UA/Dnipro/0056.jpg,48.454412,35.01972,UA,Dnipro Oblast,Dnipro,mapillary,2023-06-19,0.732
+sample_0057,images/UA/Dnipro/0057.jpg,48.451483,35.052441,UA,Dnipro Oblast,Dnipro,osv5m,2023-01-12,0.526
+sample_0058,images/UA/Dnipro/0058.jpg,48.464769,35.069488,UA,Dnipro Oblast,Dnipro,osv5m,2023-10-24,0.493
+sample_0059,images/UA/Dnipro/0059.jpg,48.555141,35.003559,UA,Dnipro Oblast,Dnipro,mapillary,2023-07-01,0.508
+sample_0060,images/PL/Warsaw/0060.jpg,52.307377,20.972306,PL,Masovian,Warsaw,osv5m,2023-11-28,0.841
+sample_0061,images/PL/Warsaw/0061.jpg,52.230039,21.041643,PL,Masovian,Warsaw,mapillary,2023-07-28,0.423
+sample_0062,images/PL/Warsaw/0062.jpg,52.196902,21.018309,PL,Masovian,Warsaw,osv5m,2023-06-10,0.892
+sample_0063,images/PL/Warsaw/0063.jpg,52.254224,20.986516,PL,Masovian,Warsaw,mapillary,2023-07-11,0.567
+sample_0064,images/PL/Warsaw/0064.jpg,52.307781,21.048595,PL,Masovian,Warsaw,osv5m,2023-11-17,0.64
+sample_0065,images/PL/Warsaw/0065.jpg,52.291247,21.004876,PL,Masovian,Warsaw,mapillary,2023-02-09,0.507
+sample_0066,images/PL/Warsaw/0066.jpg,52.267893,21.003039,PL,Masovian,Warsaw,mapillary,2023-10-14,0.607
+sample_0067,images/PL/Warsaw/0067.jpg,52.241849,20.960052,PL,Masovian,Warsaw,mapillary,2023-07-19,0.514
+sample_0068,images/PL/Warsaw/0068.jpg,52.281149,21.026932,PL,Masovian,Warsaw,mapillary,2023-06-14,0.442
+sample_0069,images/PL/Warsaw/0069.jpg,52.206729,20.973779,PL,Masovian,Warsaw,osv5m,2023-11-28,0.475
+sample_0070,images/PL/Warsaw/0070.jpg,52.277828,20.977255,PL,Masovian,Warsaw,osv5m,2023-06-13,0.818
+sample_0071,images/PL/Warsaw/0071.jpg,52.198955,21.001259,PL,Masovian,Warsaw,osv5m,2023-11-24,0.942
+sample_0072,images/CZ/Prague/0072.jpg,50.043853,14.409717,CZ,Prague,Prague,mapillary,2023-05-10,0.526
+sample_0073,images/CZ/Prague/0073.jpg,50.090718,14.371213,CZ,Prague,Prague,osv5m,2023-08-15,0.665
+sample_0074,images/CZ/Prague/0074.jpg,50.088299,14.492943,CZ,Prague,Prague,mapillary,2023-11-03,0.57
+sample_0075,images/CZ/Prague/0075.jpg,50.039699,14.378247,CZ,Prague,Prague,mapillary,2023-04-22,0.586
+sample_0076,images/CZ/Prague/0076.jpg,50.085324,14.411332,CZ,Prague,Prague,mapillary,2023-04-16,0.767
+sample_0077,images/CZ/Prague/0077.jpg,50.081889,14.383047,CZ,Prague,Prague,mapillary,2023-12-23,0.63
+sample_0078,images/CZ/Prague/0078.jpg,50.052678,14.454458,CZ,Prague,Prague,mapillary,2023-02-25,0.655
+sample_0079,images/CZ/Prague/0079.jpg,50.132024,14.550279,CZ,Prague,Prague,osv5m,2023-01-18,0.55
+sample_0080,images/CZ/Prague/0080.jpg,50.107484,14.392796,CZ,Prague,Prague,osv5m,2023-11-17,0.993
+sample_0081,images/CZ/Prague/0081.jpg,49.974458,14.368712,CZ,Prague,Prague,osv5m,2023-10-27,0.832
+sample_0082,images/CZ/Prague/0082.jpg,49.981327,14.434972,CZ,Prague,Prague,osv5m,2023-03-24,0.917
+sample_0083,images/CZ/Prague/0083.jpg,49.996105,14.463559,CZ,Prague,Prague,osv5m,2023-09-16,0.776
+sample_0084,images/HU/Budapest/0084.jpg,47.494809,19.060042,HU,Central Hungary,Budapest,osv5m,2023-04-09,0.602
+sample_0085,images/HU/Budapest/0085.jpg,47.513937,19.027439,HU,Central Hungary,Budapest,mapillary,2023-04-13,0.816
+sample_0086,images/HU/Budapest/0086.jpg,47.492973,19.02266,HU,Central Hungary,Budapest,osv5m,2023-06-18,0.68
+sample_0087,images/HU/Budapest/0087.jpg,47.585335,19.076266,HU,Central Hungary,Budapest,osv5m,2023-10-23,0.412
+sample_0088,images/HU/Budapest/0088.jpg,47.545811,18.995579,HU,Central Hungary,Budapest,osv5m,2023-01-12,0.579
+sample_0089,images/HU/Budapest/0089.jpg,47.416685,19.107399,HU,Central Hungary,Budapest,osv5m,2023-09-24,0.841
+sample_0090,images/HU/Budapest/0090.jpg,47.530817,18.938607,HU,Central Hungary,Budapest,osv5m,2023-04-09,0.662
+sample_0091,images/HU/Budapest/0091.jpg,47.542408,19.048408,HU,Central Hungary,Budapest,osv5m,2023-12-06,0.904
+sample_0092,images/HU/Budapest/0092.jpg,47.620837,18.972153,HU,Central Hungary,Budapest,mapillary,2023-07-19,0.739
+sample_0093,images/HU/Budapest/0093.jpg,47.568602,19.052357,HU,Central Hungary,Budapest,mapillary,2023-08-06,0.43
+sample_0094,images/HU/Budapest/0094.jpg,47.472896,19.063947,HU,Central Hungary,Budapest,osv5m,2023-06-25,0.928
+sample_0095,images/HU/Budapest/0095.jpg,47.476197,19.161153,HU,Central Hungary,Budapest,osv5m,2023-05-27,0.449
+sample_0096,images/UA/Kyiv/0096.jpg,50.511899,30.530964,UA,Kyiv Oblast,Kyiv,mapillary,2023-06-15,1.0
+sample_0097,images/UA/Lviv/0097.jpg,49.797121,24.088336,UA,Lviv Oblast,Lviv,mapillary,2023-06-15,0.891
+sample_0098,images/CZ/Prague/0098.jpg,50.027013,14.369493,CZ,Prague,Prague,mapillary,2023-06-15,0.975
+sample_0099,images/PL/Warsaw/0099.jpg,52.232874,21.021837,PL,Masovian,Warsaw,mapillary,2023-06-15,0.576

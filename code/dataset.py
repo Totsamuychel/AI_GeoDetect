@@ -61,12 +61,21 @@ def _split_by_h3(
         logger.warning("h3 не встановлено, використовується k-means розбиття")
         return _split_by_kmeans(df, train_frac=train_frac, val_frac=val_frac, seed=seed)
 
+    # API h3 >= 4.0 використовує latlng_to_cell(); старий h3 < 4.0 має geo_to_h3().
+    if hasattr(h3, "latlng_to_cell"):
+        _latlng_to_cell = h3.latlng_to_cell  # type: ignore[attr-defined]
+    elif hasattr(h3, "geo_to_h3"):
+        _latlng_to_cell = h3.geo_to_h3  # type: ignore[attr-defined]
+    else:
+        logger.warning("Бібліотека h3 не підтримує очікуваний API, fallback до k-means")
+        return _split_by_kmeans(df, train_frac=train_frac, val_frac=val_frac, seed=seed)
+
     rng = np.random.default_rng(seed)
 
     # Призначаємо кожному зображенню H3-гексагон
     df = df.copy()
     df["h3_cell"] = df.apply(
-        lambda row: h3.geo_to_h3(row["lat"], row["lon"], h3_resolution), axis=1
+        lambda row: _latlng_to_cell(row["lat"], row["lon"], h3_resolution), axis=1
     )
 
     unique_cells = df["h3_cell"].unique()
@@ -330,7 +339,7 @@ class GeoDataset(Dataset):
     def __len__(self) -> int:
         return len(self.df)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int, tuple[float, float]]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, int, torch.Tensor]:
         """
         Повертає елемент датасету.
 
@@ -338,10 +347,14 @@ class GeoDataset(Dataset):
             idx: Індекс елементу.
 
         Повертає:
-            Кортеж (image_tensor, city_index, (lat, lon)):
+            Кортеж (image_tensor, city_index, coords):
             - image_tensor: torch.Tensor форми (3, H, W)
             - city_index:   int — індекс міста
-            - (lat, lon):   tuple[float, float] — GPS-координати
+            - coords:       torch.Tensor форми (2,) з [lat, lon] у градусах.
+
+        Примітка: повертаємо саме tensor (а не tuple), щоб default collate
+        у DataLoader давав чистий тензор форми (N, 2), а не фрагментовану
+        структуру, що залежить від версії PyTorch.
         """
         if self.cache_images and idx in self._cache:
             img_tensor = self._cache[idx]
@@ -370,8 +383,9 @@ class GeoDataset(Dataset):
         city_idx = self._city_to_idx.get(city, 0)
         lat = float(row["lat"])
         lon = float(row["lon"])
+        coords = torch.tensor([lat, lon], dtype=torch.float32)
 
-        return img_tensor, city_idx, (lat, lon)
+        return img_tensor, city_idx, coords
 
     def get_sample_info(self, idx: int) -> dict:
         """Повертає метадані зразка без завантаження зображення."""

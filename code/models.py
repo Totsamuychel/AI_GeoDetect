@@ -109,17 +109,21 @@ class BaselineCNN(nn.Module):
             x: Батч зображень (N, 3, H, W).
 
         Повертає:
-            Тензор форми (N, 512) — normalized embeddings.
+            Тензор форми (N, 512) — L2-нормалізовані embeddings.
+
+        Примітка: метод НЕ обгортає обчислення в torch.no_grad(), щоб
+        зберегти можливість проходження градієнтів при використанні
+        всередині навчального циклу (напр. metric-learning). Для чистого
+        інференсу викликайте його в блоці with torch.no_grad():
         """
         feat = self.features(x)
         feat = self.avgpool(feat)
         feat = feat.flatten(1)  # (N, 1408)
 
-        # Перший шар голови як embedding
-        with torch.no_grad():
-            emb = self.classifier[0](feat)  # Linear → (N, 512)
-            emb = self.classifier[1](emb)   # BN
-            emb = self.classifier[2](emb)   # ReLU
+        # Перший шар голови як embedding (Linear → BN → ReLU)
+        emb = self.classifier[0](feat)  # Linear → (N, 512)
+        emb = self.classifier[1](emb)   # BN
+        emb = self.classifier[2](emb)   # ReLU
 
         return F.normalize(emb, dim=1)
 
