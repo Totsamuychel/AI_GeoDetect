@@ -1,0 +1,109 @@
+# =============================================================================
+# GeoCLIP configuration — contrastive learning with GPS gallery
+# Architecture: CLIP image encoder + Fourier-feature GPS encoder,
+# trained with InfoNCE loss against a GPS gallery.
+# =============================================================================
+
+data:
+  manifest_csv: "data/dataset_manifest.csv"
+  image_root: "data/images/"
+  target_countries: ["UA", "PL", "DE", "CZ", "HU", "AT", "RO", "SK"]
+  target_cities: ["Kyiv", "Lviv", "Odesa", "Kharkiv", "Dnipro", "Warsaw", "Prague", "Budapest"]
+  quality_threshold: 0.5
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 4
+
+  # CLIP ViT-L/14 expects 224 px
+  image_size: 224
+  mean: [0.48145466, 0.4578275, 0.40821073]   # CLIP-specific mean
+  std: [0.26862954, 0.26130258, 0.27577711]    # CLIP-specific std
+
+  augmentation:
+    random_resized_crop: true
+    crop_scale: [0.75, 1.0]
+    horizontal_flip: true
+    color_jitter:
+      brightness: 0.15
+      contrast: 0.15
+      saturation: 0.15
+      hue: 0.03
+    random_grayscale_prob: 0.03
+    gaussian_blur_prob: 0.1
+
+model:
+  architecture: "geoclip"
+
+  # CLIP image encoder backbone
+  clip_model: "openai/clip-vit-large-patch14"
+  freeze_clip: true                 # freeze CLIP during warm-up
+  unfreeze_after_epoch: 8           # unfreeze last N transformer blocks after this epoch
+  unfreeze_last_n_blocks: 4         # number of ViT blocks to unfreeze
+  dropout: 0.2
+
+  # Projection head dimensions
+  embedding_dim: 512                # final joint embedding space dimension
+  image_projection_hidden: 1024     # image encoder → projection MLP hidden size
+  gps_projection_hidden: 512        # GPS encoder → projection MLP hidden size
+
+  # GPS / location encoder (Fourier feature + MLP)
+  fourier_features: 256             # number of Fourier features for (lat, lon) encoding
+  fourier_sigma: 10.0               # scale of random Fourier feature matrix
+  gps_encoder_layers: 3             # depth of GPS MLP
+  gps_encoder_activation: "gelu"
+
+  # Contrastive / gallery settings
+  gps_gallery_size: 1000            # number of GPS anchor points in the gallery
+  gallery_sampling: "grid"          # grid / random / clustered
+  gallery_grid_resolution: 32       # H3 resolution for grid-based gallery (if clustered)
+  temperature: 0.07                 # InfoNCE softmax temperature (learnable option below)
+  learn_temperature: true           # if true, temperature is a learnable parameter
+
+  # Inference: top-k GPS candidates to return
+  topk_candidates: 10
+
+training:
+  batch_size: 32
+  epochs: 50
+  lr: 0.0005                        # projection heads
+  backbone_lr: 0.000005             # CLIP backbone (very conservative)
+  weight_decay: 0.01
+  scheduler: "cosine"
+  scheduler_warmup_epochs: 5        # longer warm-up for contrastive training
+  early_stopping_patience: 10
+  mixed_precision: true
+  gradient_clip_norm: 1.0
+  seed: 42
+
+  # InfoNCE loss with optional supervised cross-entropy auxiliary loss
+  loss:
+    infonce_weight: 1.0
+    country_auxiliary_weight: 0.3   # auxiliary country classification loss
+    city_auxiliary_weight: 0.2      # auxiliary city classification loss
+    coordinate_regression_weight: 0.0   # disabled in contrastive mode; enable for hybrid
+
+  # Hard negative mining
+  hard_negatives:
+    enabled: true
+    strategy: "semi-hard"           # semi-hard / hardest / random
+    num_hard_negatives: 8           # extra in-batch hard negatives per sample
+
+  # Queue / memory bank (MoCo-style) — optional
+  use_queue: false
+  queue_size: 4096
+
+logging:
+  use_wandb: false
+  use_mlflow: false
+  project_name: "geo-photo-ukraine"
+  run_name: "geoclip-contrastive"
+  log_dir: "results/logs/"
+  log_every_n_steps: 50
+  save_top_k_checkpoints: 3
+
+paths:
+  checkpoint_dir: "results/checkpoints/geoclip/"
+  plots_dir: "results/plots/geoclip/"
+  metrics_dir: "results/metrics/geoclip/"
+  gallery_cache: "data/gps_gallery_cache.npy"   # pre-computed gallery embeddings

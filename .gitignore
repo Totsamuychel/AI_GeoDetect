@@ -1,0 +1,133 @@
+# =============================================================================
+# .gitignore for geo-photo-ukraine diploma project
+# =============================================================================
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+develop-eggs/
+.installed.cfg
+lib/
+lib64/
+.eggs/
+MANIFEST
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+.env
+.conda/
+*.conda
+
+# ── Jupyter notebooks ─────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+# Uncomment to ignore all notebooks (keep commented to track them):
+# notebooks/*.ipynb
+
+# ── Distribution / packaging ─────────────────────────────────────────────────
+*.tar.gz
+*.whl
+
+# ── PyTest / coverage ─────────────────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+*.cover
+.hypothesis/
+
+# ── Type checking ─────────────────────────────────────────────────────────────
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pytype/
+
+# ── IDEs ─────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ── Data — raw images and large datasets ─────────────────────────────────────
+data/images/
+data/raw/
+data/splits/
+# Keep example manifests and small CSVs:
+!data/dataset_manifest_example.csv
+
+# ── Model checkpoints and weights ─────────────────────────────────────────────
+results/checkpoints/
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+
+# ── Experiment logs ───────────────────────────────────────────────────────────
+results/logs/
+wandb/
+mlruns/
+mlartifacts/
+lightning_logs/
+runs/
+
+# ── Generated plots and metrics (optional — uncomment to exclude) ─────────────
+# results/plots/
+# results/metrics/
+
+# ── Cached gallery and pre-computed embeddings ────────────────────────────────
+data/gps_gallery_cache.npy
+data/*.npy
+data/*.npz
+data/*.pkl
+
+# ── HuggingFace model cache ───────────────────────────────────────────────────
+.cache/
+~/.cache/huggingface/
+
+# ── Mapillary / API tokens ────────────────────────────────────────────────────
+.env
+.env.local
+secrets.yaml
+tokens.json
+
+# ── Temporary files ───────────────────────────────────────────────────────────
+*.tmp
+*.temp
+*.log
+*.out
+*.pid
+tmp/
+temp/
+
+# ── OS files ─────────────────────────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ── Compiled documentation ───────────────────────────────────────────────────
+docs/_build/
+site/

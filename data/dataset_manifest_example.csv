@@ -1,0 +1,11 @@
+image_id,filepath,lat,lon,country,region,city,source,capture_date,quality_score
+UA_KYIV_00001,data/images/UA/Kyiv/UA_KYIV_00001.jpg,50.4501,30.5234,UA,Kyivska,Kyiv,mapillary,2023-06-15,0.92
+UA_LVIV_00001,data/images/UA/Lviv/UA_LVIV_00001.jpg,49.8397,24.0297,UA,Lvivska,Lviv,mapillary,2023-07-02,0.88
+UA_ODESA_00001,data/images/UA/Odesa/UA_ODESA_00001.jpg,46.4825,30.7233,UA,Odeska,Odesa,mapillary,2023-05-20,0.85
+UA_KHARKIV_00001,data/images/UA/Kharkiv/UA_KHARKIV_00001.jpg,49.9935,36.2304,UA,Kharkivska,Kharkiv,mapillary,2023-08-11,0.79
+UA_DNIPRO_00001,data/images/UA/Dnipro/UA_DNIPRO_00001.jpg,48.4647,35.0462,UA,Dnipropetrovska,Dnipro,mapillary,2023-09-03,0.83
+PL_WAW_00001,data/images/PL/Warsaw/PL_WAW_00001.jpg,52.2297,21.0122,PL,Masovian,Warsaw,mapillary,2023-04-18,0.91
+CZ_PRG_00001,data/images/CZ/Prague/CZ_PRG_00001.jpg,50.0755,14.4378,CZ,Prague,Prague,mapillary,2023-03-25,0.94
+HU_BUD_00001,data/images/HU/Budapest/HU_BUD_00001.jpg,47.4979,19.0402,HU,Pest,Budapest,mapillary,2023-06-30,0.87
+RO_BUC_00001,data/images/RO/Bucharest/RO_BUC_00001.jpg,44.4268,26.1025,RO,Ilfov,Bucharest,mapillary,2023-07-14,0.76
+SK_BRA_00001,data/images/SK/Bratislava/SK_BRA_00001.jpg,48.1486,17.1077,SK,Bratislava,Bratislava,mapillary,2023-05-08,0.82

@@ -1,0 +1,77 @@
+# =============================================================================
+# Main configuration for geo-photo-ukraine project
+# =============================================================================
+
+data:
+  manifest_csv: "data/dataset_manifest.csv"
+  image_root: "data/images/"
+  target_countries: ["UA", "PL", "DE", "CZ", "HU", "AT", "RO", "SK"]
+  target_cities: ["Kyiv", "Lviv", "Odesa", "Kharkiv", "Dnipro", "Warsaw", "Prague", "Budapest"]
+  quality_threshold: 0.5
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 4
+
+  # Image preprocessing
+  image_size: 224
+  mean: [0.485, 0.456, 0.406]       # ImageNet mean
+  std: [0.229, 0.224, 0.225]        # ImageNet std
+
+  # Data augmentation (training only)
+  augmentation:
+    random_resized_crop: true
+    crop_scale: [0.7, 1.0]
+    horizontal_flip: true
+    color_jitter:
+      brightness: 0.2
+      contrast: 0.2
+      saturation: 0.2
+      hue: 0.05
+    random_grayscale_prob: 0.05
+    gaussian_blur_prob: 0.1
+
+model:
+  architecture: "streetclip"        # baseline / streetclip / geoclip
+  num_classes: 8                    # number of target countries
+  pretrained: true
+  freeze_backbone: true
+  unfreeze_after_epoch: 5
+  dropout: 0.3
+
+  # Classification head
+  head_hidden_dim: 512
+  head_activation: "relu"
+
+training:
+  batch_size: 32
+  epochs: 50
+  lr: 0.001
+  backbone_lr: 0.00001              # lower LR for pre-trained backbone layers
+  weight_decay: 0.01
+  scheduler: "cosine"               # cosine / step / plateau
+  scheduler_warmup_epochs: 2
+  early_stopping_patience: 10
+  mixed_precision: true             # torch.cuda.amp
+  gradient_clip_norm: 1.0
+  seed: 42
+
+  # Loss weights (for multi-task: classification + regression)
+  loss:
+    country_classification_weight: 1.0
+    city_classification_weight: 0.5
+    coordinate_regression_weight: 0.3
+    regression_type: "haversine"    # haversine / mse / smooth_l1
+
+logging:
+  use_wandb: false
+  use_mlflow: false
+  project_name: "geo-photo-ukraine"
+  log_dir: "results/logs/"
+  log_every_n_steps: 50
+  save_top_k_checkpoints: 3        # keep best k checkpoints by val loss
+
+paths:
+  checkpoint_dir: "results/checkpoints/"
+  plots_dir: "results/plots/"
+  metrics_dir: "results/metrics/"

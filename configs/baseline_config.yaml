@@ -1,0 +1,90 @@
+# =============================================================================
+# Baseline configuration — EfficientNet-B2 supervised classifier + regressor
+# Inherits defaults from config.yaml; overrides are specified here.
+# =============================================================================
+
+data:
+  manifest_csv: "data/dataset_manifest.csv"
+  image_root: "data/images/"
+  target_countries: ["UA", "PL", "DE", "CZ", "HU", "AT", "RO", "SK"]
+  target_cities: ["Kyiv", "Lviv", "Odesa", "Kharkiv", "Dnipro", "Warsaw", "Prague", "Budapest"]
+  quality_threshold: 0.5
+  train_ratio: 0.7
+  val_ratio: 0.15
+  test_ratio: 0.15
+  num_workers: 4
+
+  # EfficientNet-B2 native resolution
+  image_size: 260
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+
+  augmentation:
+    random_resized_crop: true
+    crop_scale: [0.65, 1.0]
+    horizontal_flip: true
+    color_jitter:
+      brightness: 0.3
+      contrast: 0.3
+      saturation: 0.2
+      hue: 0.05
+    random_grayscale_prob: 0.05
+    gaussian_blur_prob: 0.1
+    random_erasing_prob: 0.1       # regularisation via random patches
+
+model:
+  architecture: "baseline"
+  backbone: "efficientnet_b2"      # torchvision / timm model name
+  pretrained: true
+  pretrained_weights: "IMAGENET1K_V1"
+  freeze_backbone: true
+  unfreeze_after_epoch: 5          # unfreeze all backbone layers after epoch 5
+  unfreeze_layers: "all"           # "all" or list of named layer prefixes
+  dropout: 0.4
+
+  num_classes: 8                   # country classification (UA, PL, DE, CZ, HU, AT, RO, SK)
+  num_cities: 8                    # city classification
+  coordinate_output: true          # also predict (lat, lon)
+
+  # Classification + regression head
+  head_hidden_dim: 512
+  head_activation: "swish"        # matches EfficientNet activation style
+
+training:
+  batch_size: 64                   # EfficientNet-B2 fits larger batches
+  epochs: 60
+  lr: 0.001
+  backbone_lr: 0.00005
+  weight_decay: 0.01
+  scheduler: "cosine"
+  scheduler_warmup_epochs: 3
+  early_stopping_patience: 12
+  mixed_precision: true
+  gradient_clip_norm: 1.0
+  seed: 42
+
+  loss:
+    country_classification_weight: 1.0
+    city_classification_weight: 0.8
+    coordinate_regression_weight: 0.5
+    regression_type: "haversine"
+
+  # Label smoothing for classification head
+  label_smoothing: 0.1
+
+  # Stochastic depth (drop_path) rate for EfficientNet
+  stochastic_depth_prob: 0.2
+
+logging:
+  use_wandb: false
+  use_mlflow: false
+  project_name: "geo-photo-ukraine"
+  run_name: "baseline-efficientnet-b2"
+  log_dir: "results/logs/"
+  log_every_n_steps: 50
+  save_top_k_checkpoints: 3
+
+paths:
+  checkpoint_dir: "results/checkpoints/baseline/"
+  plots_dir: "results/plots/baseline/"
+  metrics_dir: "results/metrics/baseline/"
