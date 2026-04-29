@@ -36,6 +36,10 @@ from typing import Optional, Union
 import pandas as pd
 import requests
 from tqdm import tqdm
+from dotenv import load_dotenv
+
+# Завантажуємо змінні оточення (.env)
+load_dotenv()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -158,6 +162,7 @@ def _download_osv5m_hf(
             OSV5M_HF_REPO,
             split="train",
             streaming=True,  # Стримінг для великих датасетів
+            trust_remote_code=True,
         )
     except Exception as e:
         logger.error(f"Помилка завантаження OSV-5M: {e}")
@@ -260,24 +265,29 @@ def _download_osv5m_parquet(
     Альтернативне завантаження OSV-5M через parquet-файли із HuggingFace.
     Використовується якщо datasets API недоступний.
     """
-    import pyarrow.parquet as pq
+    try:
+        from huggingface_hub import hf_hub_download
+        import pyarrow.parquet as pq
+    except ImportError:
+        raise ImportError(
+            "Встановіть необхідні бібліотеки: pip install huggingface-hub pyarrow"
+        )
 
     logger.info("Завантаження parquet метаданих OSV-5M...")
 
-    # URL parquet-файлів (приблизні, залежать від версії датасету)
-    parquet_url = (
-        f"https://huggingface.co/datasets/{OSV5M_HF_REPO}/resolve/main/"
-        "data/train-00000-of-00001.parquet"
-    )
+    try:
+        # Завантажуємо parquet файл через hf_hub_download (використовує токен з .env)
+        local_parquet = hf_hub_download(
+            repo_id=OSV5M_HF_REPO,
+            filename="data/train-00000-of-00001.parquet",
+            repo_type="dataset",
+        )
+    except Exception as e:
+        logger.error(f"Помилка завантаження parquet з HuggingFace: {e}")
+        raise
 
-    local_parquet = images_dir.parent / "metadata.parquet"
-
-    if not local_parquet.exists():
-        logger.info(f"Завантаження parquet: {parquet_url}")
-        _download_file(parquet_url, local_parquet)
-
-    logger.info("Читання parquet файлу...")
-    table = pq.read_table(str(local_parquet))
+    logger.info(f"Читання parquet файлу: {local_parquet}")
+    table = pq.read_table(local_parquet)
     df = table.to_pandas()
 
     # Фільтрація
