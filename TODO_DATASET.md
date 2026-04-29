@@ -6,30 +6,6 @@
 
 ---
 
-## 0. Підготовка середовища
-
-- [ ] Створити RunPod Pod з шаблоном **PyTorch 2.7 + CUDA 12.8** (для RTX 5090 / sm_120)
-- [ ] Підключити **Volume 20GB** до Pod'а (`/workspace`)
-- [ ] Встановити залежності:
-  ```bash
-  pip install torch==2.7.* torchvision==0.22.* --index-url https://download.pytorch.org/whl/cu128
-  pip install -r requirements.txt
-  ```
-- [ ] Отримати **HuggingFace Token** → [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
-- [ ] Отримати **Mapillary API Key** → [mapillary.com/dashboard/developers](https://www.mapillary.com/dashboard/developers) *(опціонально)*
-- [ ] Експортувати ключі:
-  ```bash
-  export HF_TOKEN="hf_xxxxxxxxxxxxxxx"
-  export MAPILLARY_ACCESS_TOKEN="MLY|xxxxxxxxxxxxxxx"   # опціонально
-  ```
-- [ ] Перевірити GPU:
-  ```python
-  import torch
-  assert torch.cuda.is_available()
-  print(torch.cuda.get_device_name(0))   # → NVIDIA GeForce RTX 5090
-  ```
-
----
 
 ## 1. OSV-5M — основне джерело (обов'язково)
 
