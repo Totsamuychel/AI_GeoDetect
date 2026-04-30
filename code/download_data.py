@@ -161,7 +161,7 @@ def _download_osv5m_hf(
         dataset = load_dataset(
             OSV5M_HF_REPO,
             split="train",
-            streaming=True,  # Стримінг для великих датасетів
+            streaming=False,
             trust_remote_code=True,
         )
     except Exception as e:
@@ -170,33 +170,29 @@ def _download_osv5m_hf(
         raise
 
     manifest_rows = []
-    country_counts: dict[str, int] = {c: 0 for c in countries}
 
     logger.info("Фільтрація зразків за країною та якістю...")
 
-    candidates: list[dict] = []
-    for sample in tqdm(dataset, desc="Сканування OSV-5M"):
-        country = str(sample.get("country", "")).upper()
+    filtered = dataset.filter(
+        lambda x: str(x.get("country", "")).upper() in countries
+                  and float(x.get("quality_score", 1.0)) >= quality_threshold
+    )
 
-        if country not in countries:
-            continue
+    if max_images_per_country:
+        from collections import defaultdict
+        counts = defaultdict(int)
+        candidates = []
+        for sample in filtered:
+            c = str(sample.get("country", "")).upper()
+            if counts[c] < max_images_per_country:
+                candidates.append(sample)
+                counts[c] += 1
+            if all(counts[c] >= max_images_per_country for c in countries):
+                break
+    else:
+        candidates = list(filtered)
 
-        quality = float(sample.get("quality_score", 1.0))
-        if quality < quality_threshold:
-            continue
-
-        if max_images_per_country and country_counts[country] >= max_images_per_country:
-            continue
-
-        candidates.append(sample)
-        country_counts[country] += 1
-
-        if max_images_per_country and all(
-            country_counts[c] >= max_images_per_country for c in countries
-        ):
-            break
-
-    logger.info(f"Знайдено {len(candidates)} кандидатів. Завантаження зображень...")
+    logger.info(f"Filtered {len(candidates)} candidates for countries {countries}. Starting download...")
 
     def _download_single(sample: dict) -> Optional[dict]:
         """Завантажує одне зображення та повертає рядок маніфесту."""
@@ -211,6 +207,20 @@ def _download_osv5m_hf(
             country_dir.mkdir(exist_ok=True)
 
             out_path = country_dir / f"{img_id}.jpg"
+
+            if out_path.exists() and out_path.stat().st_size > 1000:
+                return {
+                    "image_id":     img_id,
+                    "filepath":     str(out_path.relative_to(images_dir.parent)),
+                    "lat":          round(lat, 6),
+                    "lon":          round(lon, 6),
+                    "country":      country,
+                    "region":       str(sample.get("region", "")),
+                    "city":         str(sample.get("city", "")),
+                    "source":       "osv5m",
+                    "capture_date": str(sample.get("date", "")),
+                    "quality_score": round(float(sample.get("quality_score", 1.0)), 3),
+                }
 
             if not out_path.exists():
                 # Зображення зберігається як PIL Image у датасеті
@@ -275,20 +285,28 @@ def _download_osv5m_parquet(
 
     logger.info("Завантаження parquet метаданих OSV-5M...")
 
-    try:
-        # Завантажуємо parquet файл через hf_hub_download (використовує токен з .env)
-        local_parquet = hf_hub_download(
-            repo_id=OSV5M_HF_REPO,
-            filename="data/train-00000-of-00001.parquet",
-            repo_type="dataset",
-        )
-    except Exception as e:
-        logger.error(f"Помилка завантаження parquet з HuggingFace: {e}")
-        raise
+    dfs = []
+    parquet_files = [
+        f"data/train-{str(i).zfill(5)}-of-00100.parquet"
+        for i in range(5) # First 5 shards
+    ]
 
-    logger.info(f"Читання parquet файлу: {local_parquet}")
-    table = pq.read_table(local_parquet)
-    df = table.to_pandas()
+    for filename in parquet_files:
+        try:
+            local_parquet = hf_hub_download(
+                repo_id=OSV5M_HF_REPO,
+                filename=filename,
+                repo_type="dataset",
+            )
+            logger.info(f"Читання parquet файлу: {local_parquet}")
+            table = pq.read_table(local_parquet)
+            dfs.append(table.to_pandas())
+        except Exception as e:
+            logger.error(f"Помилка завантаження {filename} з HuggingFace: {e}")
+
+    if not dfs:
+        raise RuntimeError("Не вдалося завантажити жодного parquet файлу")
+    df = pd.concat(dfs, ignore_index=True)
 
     # Фільтрація
     if "country" in df.columns:
