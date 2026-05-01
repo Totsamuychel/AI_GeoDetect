@@ -156,12 +156,12 @@ def _download_osv5m_hf(
 
     logger.info("Завантаження метаданих OSV-5M із HuggingFace...")
 
-    # Завантажуємо лише метадані (train split, без зображень)
+    # Завантажуємо метадані та зображення через streaming=True
     try:
         dataset = load_dataset(
             OSV5M_HF_REPO,
             split="train",
-            streaming=False,
+            streaming=True,
             trust_remote_code=True,
         )
     except Exception as e:
@@ -170,66 +170,29 @@ def _download_osv5m_hf(
         raise
 
     manifest_rows = []
+    country_counts: dict[str, int] = {c: 0 for c in countries}
 
-    logger.info("Фільтрація зразків за країною та якістю...")
+    logger.info("Сканування датасету та збереження зображень на льоту...")
 
-    filtered = dataset.filter(
-        lambda x: str(x.get("country", "")).upper() in countries
-                  and float(x.get("quality_score", 1.0)) >= quality_threshold
-    )
-
-    if max_images_per_country:
-        from collections import defaultdict
-        counts = defaultdict(int)
-        candidates = []
-        for sample in filtered:
-            c = str(sample.get("country", "")).upper()
-            if counts[c] < max_images_per_country:
-                candidates.append(sample)
-                counts[c] += 1
-            if all(counts[c] >= max_images_per_country for c in countries):
-                break
-    else:
-        candidates = list(filtered)
-
-    logger.info(f"Filtered {len(candidates)} candidates for countries {countries}. Starting download...")
-
-    def _download_single(sample: dict) -> Optional[dict]:
-        """Завантажує одне зображення та повертає рядок маніфесту."""
+    def _process_and_save(sample: dict) -> Optional[dict]:
         try:
             img_id = str(sample.get("id", sample.get("image_id", "")))
             country = str(sample.get("country", "")).upper()
             lat = float(sample.get("lat", 0.0))
             lon = float(sample.get("lon", 0.0))
 
-            # Директорія по країні
             country_dir = images_dir / country
             country_dir.mkdir(exist_ok=True)
-
             out_path = country_dir / f"{img_id}.jpg"
 
             if out_path.exists() and out_path.stat().st_size > 1000:
-                return {
-                    "image_id":     img_id,
-                    "filepath":     str(out_path.relative_to(images_dir.parent)),
-                    "lat":          round(lat, 6),
-                    "lon":          round(lon, 6),
-                    "country":      country,
-                    "region":       str(sample.get("region", "")),
-                    "city":         str(sample.get("city", "")),
-                    "source":       "osv5m",
-                    "capture_date": str(sample.get("date", "")),
-                    "quality_score": round(float(sample.get("quality_score", 1.0)), 3),
-                }
-
-            if not out_path.exists():
-                # Зображення зберігається як PIL Image у датасеті
+                pass # Already exists
+            else:
                 if "image" in sample and sample["image"] is not None:
                     pil_img = sample["image"]
                     pil_img.save(str(out_path), "JPEG", quality=90)
                 else:
-                    # Намагаємось завантажити за URL
-                    url = sample.get("image_url", "")
+                    url = sample.get("image_url", "") or sample.get("thumb_original_url", "")
                     if url:
                         _download_image_url(url, out_path)
 
@@ -248,19 +211,31 @@ def _download_osv5m_hf(
                 "capture_date": str(sample.get("date", "")),
                 "quality_score": round(float(sample.get("quality_score", 1.0)), 3),
             }
-
         except Exception as e:
-            logger.debug(f"Помилка завантаження зразку: {e}")
+            logger.debug(f"Помилка обробки зразку: {e}")
             return None
 
-    # Паралельне завантаження
-    with ThreadPoolExecutor(max_workers=num_workers) as executor:
-        futures = {executor.submit(_download_single, s): s for s in candidates}
+    for sample in tqdm(dataset, desc="Сканування OSV-5M"):
+        country = str(sample.get("country", "")).upper()
+        if country not in countries:
+            continue
 
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Завантаження"):
-            row = future.result()
-            if row:
-                manifest_rows.append(row)
+        quality = float(sample.get("quality_score", 1.0))
+        if quality < quality_threshold:
+            continue
+
+        if max_images_per_country and country_counts[country] >= max_images_per_country:
+            continue
+
+        row = _process_and_save(sample)
+        if row:
+            manifest_rows.append(row)
+            country_counts[country] += 1
+
+        if max_images_per_country and all(
+            country_counts[c] >= max_images_per_country for c in countries
+        ):
+            break
 
     return manifest_rows
 
