@@ -60,6 +60,7 @@ class TrainConfig:
     countries:         list  = field(default_factory=lambda: ["UA"])
     quality_threshold: float = 0.4
     split_method:      str   = "h3"       # 'h3' або 'kmeans'
+    h3_resolution:     int   = 4          # Рівень деталізації H3 (3-9)
     img_size:          int   = 224
 
     # Архітектура
@@ -539,6 +540,7 @@ def train(config: TrainConfig) -> nn.Module:
         quality_threshold=config.quality_threshold,
         image_root=config.image_root if config.image_root else None,
         split_method=config.split_method,
+        h3_resolution=config.h3_resolution,
         batch_size=config.batch_size,
         num_workers=config.num_workers,
         seed=config.seed,
@@ -787,7 +789,9 @@ def main() -> None:
     if args.config:
         from utils import load_config
         cfg_dict = load_config(args.config)
-        config = TrainConfig(**{k: v for k, v in cfg_dict.items() if hasattr(TrainConfig, k)})
+        # Використовуємо __dataclass_fields__ для надійної фільтрації ключів
+        valid_keys = TrainConfig.__dataclass_fields__.keys()
+        config = TrainConfig(**{k: v for k, v in cfg_dict.items() if k in valid_keys})
     else:
         total_epochs = args.epochs
         stage1_ep = max(1, total_epochs // 3)

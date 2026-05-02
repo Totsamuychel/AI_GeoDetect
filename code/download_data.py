@@ -146,98 +146,153 @@ def _download_osv5m_hf(
     quality_threshold: float,
     num_workers: int,
 ) -> list[dict]:
-    """Завантаження через HuggingFace datasets API."""
-    try:
-        from datasets import load_dataset
-    except ImportError:
-        raise ImportError(
-            "Встановіть HuggingFace datasets: pip install datasets huggingface-hub"
-        )
+    """Завантаження через метадані та ZIP-шарди з видаленням для економії місця."""
+    import os
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+    import requests
+    import zipfile
+    import tempfile
+    import shutil
 
-    logger.info("Завантаження метаданих OSV-5M із HuggingFace...")
-
-    # Завантажуємо метадані та зображення через streaming=True
+    # 1. Isolate Cache Directory
+    cache_dir = Path("data") / ".cache" / "huggingface"
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["HF_HUB_CACHE"] = str(cache_dir)
+    
+    logger.info("Завантаження метаданих OSV-5M (train.csv)...")
     try:
-        dataset = load_dataset(
-            OSV5M_HF_REPO,
-            split="train",
-            streaming=True,
-            trust_remote_code=True,
+        csv_path = hf_hub_download(
+            repo_id=OSV5M_HF_REPO,
+            filename="train.csv",
+            repo_type="dataset",
+            cache_dir=str(cache_dir),
+            token=os.environ.get("HF_TOKEN")
         )
     except Exception as e:
-        logger.error(f"Помилка завантаження OSV-5M: {e}")
-        logger.info("Спробуйте: huggingface-cli login")
+        logger.error(f"Помилка завантаження метаданих: {e}")
         raise
 
+    # 2. Local Filtering
+    logger.info("Фільтрація метаданих (Pandas)...")
+    df = pd.read_csv(csv_path, dtype={"id": str, "country": str})
+    
+    # Зберігаємо оригінальний індекс рядка для обчислення номеру ZIP-шарду (по 50000 фото в шарді)
+    df['row_index'] = df.index
+    
+    # Фільтрація по країнах
+    df = df[df["country"].str.upper().isin(countries)]
+
+    # Обмеження кількості
+    if max_images_per_country:
+        df = df.groupby("country").head(max_images_per_country).reset_index(drop=True)
+
+    target_ids = set(df["id"].astype(str).tolist())
+    logger.info(f"Відфільтровано {len(target_ids)} зображень для країн: {countries}")
+
+    if not target_ids:
+        return []
+
+    # 3. Idempotency (перевірка існуючих)
+    needed_ids = set()
+    needed_shards = set()
     manifest_rows = []
-    country_counts: dict[str, int] = {c: 0 for c in countries}
+    
+    for _, row in df.iterrows():
+        img_id = str(row["id"])
+        country = str(row["country"]).upper()
+        country_dir = images_dir / country
+        country_dir.mkdir(parents=True, exist_ok=True)
+        out_path = country_dir / f"{img_id}.jpg"
+        
+        lat = float(row.get("latitude", 0.0))
+        lon = float(row.get("longitude", 0.0))
+        
+        manifest_row = {
+            "image_id": img_id,
+            "filepath": str(out_path.relative_to(images_dir.parent)),
+            "lat": round(lat, 6),
+            "lon": round(lon, 6),
+            "country": country,
+            "region": str(row.get("region", "")),
+            "city": str(row.get("city", "")),
+            "source": "osv5m",
+            "capture_date": str(row.get("captured_at", "")),
+            "quality_score": 1.0,
+        }
+        manifest_rows.append(manifest_row)
+        
+        if out_path.exists() and out_path.stat().st_size > 1000:
+            pass # Вже є
+        else:
+            needed_ids.add(img_id)
+            # Розрахунок шарду: 50000 фотографій на 1 zip файл
+            shard_idx = row['row_index'] // 50000
+            needed_shards.add(shard_idx)
 
-    logger.info("Сканування датасету та збереження зображень на льоту...")
+    if not needed_ids:
+        logger.info("Усі потрібні зображення вже завантажено!")
+        return manifest_rows
 
-    def _process_and_save(sample: dict) -> Optional[dict]:
-        try:
-            img_id = str(sample.get("id", sample.get("image_id", "")))
-            country = str(sample.get("country", "")).upper()
-            lat = float(sample.get("lat", 0.0))
-            lon = float(sample.get("lon", 0.0))
+    logger.info(f"Потрібно завантажити {len(needed_ids)} зображень. Вони знаходяться у шардах: {sorted(list(needed_shards))}")
 
-            country_dir = images_dir / country
-            country_dir.mkdir(exist_ok=True)
-            out_path = country_dir / f"{img_id}.jpg"
-
-            if out_path.exists() and out_path.stat().st_size > 1000:
-                pass # Already exists
-            else:
-                if "image" in sample and sample["image"] is not None:
-                    pil_img = sample["image"]
-                    pil_img.save(str(out_path), "JPEG", quality=90)
-                else:
-                    url = sample.get("image_url", "") or sample.get("thumb_original_url", "")
-                    if url:
-                        _download_image_url(url, out_path)
-
-            if not out_path.exists():
-                return None
-
-            return {
-                "image_id":     img_id,
-                "filepath":     str(out_path.relative_to(images_dir.parent)),
-                "lat":          round(lat, 6),
-                "lon":          round(lon, 6),
-                "country":      country,
-                "region":       str(sample.get("region", "")),
-                "city":         str(sample.get("city", "")),
-                "source":       "osv5m",
-                "capture_date": str(sample.get("date", "")),
-                "quality_score": round(float(sample.get("quality_score", 1.0)), 3),
-            }
-        except Exception as e:
-            logger.debug(f"Помилка обробки зразку: {e}")
-            return None
-
-    for sample in tqdm(dataset, desc="Сканування OSV-5M"):
-        country = str(sample.get("country", "")).upper()
-        if country not in countries:
-            continue
-
-        quality = float(sample.get("quality_score", 1.0))
-        if quality < quality_threshold:
-            continue
-
-        if max_images_per_country and country_counts[country] >= max_images_per_country:
-            continue
-
-        row = _process_and_save(sample)
-        if row:
-            manifest_rows.append(row)
-            country_counts[country] += 1
-
-        if max_images_per_country and all(
-            country_counts[c] >= max_images_per_country for c in countries
-        ):
+    # 4 & 5. Targeted Download & Disk Space Management
+    base_url = "https://huggingface.co/datasets/osv5m/osv5m/resolve/main/images/train/{:02d}.zip"
+    
+    for shard_idx in sorted(list(needed_shards)):
+        if not needed_ids:
             break
+            
+        url = base_url.format(shard_idx)
+        logger.info(f"Завантаження цільового шарду {shard_idx:02d}.zip...")
+        
+        tmp_zip_path = None
+        try:
+            fd, tmp_zip_path = tempfile.mkstemp(suffix=".zip")
+            os.close(fd)
+            
+            with requests.get(url, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                with open(tmp_zip_path, "wb") as f:
+                    for chunk in tqdm(r.iter_content(chunk_size=1024*1024), desc=f"Shard {shard_idx:02d}", leave=False):
+                        f.write(chunk)
+            
+            extracted_in_this_shard = 0
+            with zipfile.ZipFile(tmp_zip_path, "r") as zf:
+                for file_info in zf.infolist():
+                    filename = file_info.filename
+                    if filename.endswith('/'): continue
+                    
+                    basename = os.path.basename(filename)
+                    file_id, _ = os.path.splitext(basename)
+                    
+                    if file_id in needed_ids:
+                        row_match = df[df["id"].astype(str) == file_id].iloc[0]
+                        country = str(row_match["country"]).upper()
+                        out_path = images_dir / country / basename
+                        
+                        with zf.open(file_info) as source, open(out_path, "wb") as target:
+                            shutil.copyfileobj(source, target)
+                            
+                        needed_ids.remove(file_id)
+                        extracted_in_this_shard += 1
+                        
+            if extracted_in_this_shard > 0:
+                logger.info(f"Витягнуто {extracted_in_this_shard} фото з шарду {shard_idx:02d}. Залишилось: {len(needed_ids)}")
+            
+        except Exception as e:
+            logger.warning(f"Помилка обробки шарду {shard_idx}: {e}")
+        finally:
+            if tmp_zip_path and os.path.exists(tmp_zip_path):
+                os.remove(tmp_zip_path)
 
-    return manifest_rows
+    final_manifest = []
+    for row in manifest_rows:
+        expected_path = images_dir.parent / row["filepath"]
+        if expected_path.exists() and expected_path.stat().st_size > 1000:
+            final_manifest.append(row)
+
+    return final_manifest
 
 
 def _download_osv5m_parquet(
@@ -247,56 +302,17 @@ def _download_osv5m_parquet(
     quality_threshold: float,
 ) -> list[dict]:
     """
-    Альтернативне завантаження OSV-5M через parquet-файли із HuggingFace.
-    Використовується якщо datasets API недоступний.
+    Parquet-файлів більше немає в репозиторії OSV-5M.
+    Ця функція тепер викликає _download_osv5m_hf (metadata-first).
     """
-    try:
-        from huggingface_hub import hf_hub_download
-        import pyarrow.parquet as pq
-    except ImportError:
-        raise ImportError(
-            "Встановіть необхідні бібліотеки: pip install huggingface-hub pyarrow"
-        )
-
-    logger.info("Завантаження parquet метаданих OSV-5M...")
-
-    dfs = []
-    parquet_files = [
-        f"data/train-{str(i).zfill(5)}-of-00100.parquet"
-        for i in range(5) # First 5 shards
-    ]
-
-    for filename in parquet_files:
-        try:
-            local_parquet = hf_hub_download(
-                repo_id=OSV5M_HF_REPO,
-                filename=filename,
-                repo_type="dataset",
-            )
-            logger.info(f"Читання parquet файлу: {local_parquet}")
-            table = pq.read_table(local_parquet)
-            dfs.append(table.to_pandas())
-        except Exception as e:
-            logger.error(f"Помилка завантаження {filename} з HuggingFace: {e}")
-
-    if not dfs:
-        raise RuntimeError("Не вдалося завантажити жодного parquet файлу")
-    df = pd.concat(dfs, ignore_index=True)
-
-    # Фільтрація
-    if "country" in df.columns:
-        df = df[df["country"].str.upper().isin(countries)]
-
-    if "quality_score" in df.columns:
-        df = df[df["quality_score"] >= quality_threshold]
-
-    # Обмеження кількості
-    if max_images_per_country:
-        df = df.groupby("country").head(max_images_per_country).reset_index(drop=True)
-
-    logger.info(f"Відфільтровано {len(df)} зразків")
-    manifest_rows = df.to_dict("records")
-    return manifest_rows
+    logger.warning("Parquet-файли більше не підтримуються OSV-5M. Використовуємо metadata-first підхід...")
+    return _download_osv5m_hf(
+        countries=countries,
+        images_dir=images_dir,
+        max_images_per_country=max_images_per_country,
+        quality_threshold=quality_threshold,
+        num_workers=1
+    )
 
 
 # ──────────────────────────────────────────────────────────────────────────────

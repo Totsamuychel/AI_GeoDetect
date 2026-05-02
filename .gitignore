@@ -7,127 +7,56 @@ __pycache__/
 *.py[cod]
 *$py.class
 *.so
-*.egg
-*.egg-info/
-dist/
-build/
-eggs/
-parts/
-var/
-sdist/
-develop-eggs/
-.installed.cfg
-lib/
-lib64/
-.eggs/
-MANIFEST
 
 # ── Virtual environments ──────────────────────────────────────────────────────
 .venv/
 venv/
 env/
-ENV/
 .env
 .conda/
-*.conda
 
-# ── Jupyter notebooks ─────────────────────────────────────────────────────────
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-# Uncomment to ignore all notebooks (keep commented to track them):
-# notebooks/*.ipynb
+# ── Data & Large Files (IMPORTANT) ───────────────────────────────────────────
+# Ignore ALL images in any data-related directory
+**/images/**/*.jpg
+**/images/**/*.jpeg
+**/images/**/*.png
+**/*.zip
 
-# ── Distribution / packaging ─────────────────────────────────────────────────
-*.tar.gz
-*.whl
+# Specifically ignore raw and processed data images
+data/raw/images/
+data/processed/images/
+dataset/raw/images/
+dataset/raw/osv5m/images/
+dataset/processed/images/
 
-# ── PyTest / coverage ─────────────────────────────────────────────────────────
-.pytest_cache/
-.coverage
-htmlcov/
-coverage.xml
-*.cover
-.hypothesis/
+# Ignore split files if they are huge
+dataset/manifests/train.csv
+dataset/manifests/val.csv
 
-# ── Type checking ─────────────────────────────────────────────────────────────
-.mypy_cache/
-.dmypy.json
-dmypy.json
-.pytype/
+# Cache
+.cache/
+data/.cache/
 
-# ── IDEs ─────────────────────────────────────────────────────────────────────
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# ── Data — raw images and large datasets ─────────────────────────────────────
-data/images/
-data/raw/
-data/splits/
-# Keep example manifests and small CSVs:
+# Keep manifest files
 !data/dataset_manifest_example.csv
+!dataset/raw/osv5m/manifest.csv
+!data/osv5m/manifest.csv
 
 # ── Model checkpoints and weights ─────────────────────────────────────────────
 results/checkpoints/
 *.pth
 *.pt
 *.ckpt
-*.bin
-*.safetensors
 
-# ── Experiment logs ───────────────────────────────────────────────────────────
+# ── Logs & Temporary ──────────────────────────────────────────────────────────
 results/logs/
 wandb/
 mlruns/
-mlartifacts/
-lightning_logs/
-runs/
-
-# ── Generated plots and metrics (optional — uncomment to exclude) ─────────────
-# results/plots/
-# results/metrics/
-
-# ── Cached gallery and pre-computed embeddings ────────────────────────────────
-data/gps_gallery_cache.npy
-data/*.npy
-data/*.npz
-data/*.pkl
-
-# ── HuggingFace model cache ───────────────────────────────────────────────────
-.cache/
-~/.cache/huggingface/
-
-# ── Mapillary / API tokens ────────────────────────────────────────────────────
-.env
-.env.local
-secrets.yaml
-tokens.json
-
-# ── Temporary files ───────────────────────────────────────────────────────────
-*.tmp
-*.temp
 *.log
-*.out
-*.pid
 tmp/
 temp/
 
 # ── OS files ─────────────────────────────────────────────────────────────────
 .DS_Store
-.AppleDouble
-.LSOverride
-Icon
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
+Thumbs.db
 Desktop.ini
-$RECYCLE.BIN/
-
-# ── Compiled documentation ───────────────────────────────────────────────────
-docs/_build/
-site/

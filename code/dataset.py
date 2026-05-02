@@ -479,6 +479,7 @@ def create_dataloaders(
     quality_threshold: float = 0.0,
     image_root: Optional[Union[str, Path]] = None,
     split_method: str = "h3",
+    h3_resolution: int = 4,
     train_frac: float = 0.7,
     val_frac: float = 0.15,
     batch_size: int = 32,
@@ -498,6 +499,7 @@ def create_dataloaders(
         quality_threshold: Мінімальний поріг якості.
         image_root:        Корінь шляхів до зображень.
         split_method:      Метод розбиття: 'h3' або 'kmeans'.
+        h3_resolution:     Роздільна здатність H3 (лише для 'h3').
         train_frac:        Частка тренувальних даних.
         val_frac:          Частка валідаційних даних.
         batch_size:        Розмір батчу.
@@ -529,6 +531,7 @@ def create_dataloaders(
         train_frac=train_frac,
         val_frac=val_frac,
         method=split_method,
+        h3_resolution=h3_resolution,
         seed=seed,
     )
 
