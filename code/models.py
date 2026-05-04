@@ -27,10 +27,56 @@ logger = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────────────────────────
+# 0. Mixins та допоміжні класи
+# ──────────────────────────────────────────────────────────────────────────────
+
+class GeoModelMixin:
+    """
+    Mixin для уніфікації методу передбачення в усіх гео-моделях.
+    """
+    @torch.no_grad()
+    def predict(
+        self,
+        x: torch.Tensor,
+        class_names: Optional[list[str]] = None,
+        top_k: int = 5,
+    ) -> list[dict]:
+        """
+        Передбачення для одного зображення або батчу.
+
+        Аргументи:
+            x:           Зображення (3, H, W) або батч (N, 3, H, W).
+            class_names: Список назв класів.
+            top_k:       Кількість топ-передбачень.
+
+        Повертає:
+            Список словників [{'class': str, 'index': int, 'prob': float}, ...].
+        """
+        self.eval()
+        if x.ndim == 3:
+            x = x.unsqueeze(0)
+
+        # Отримуємо логіти (підтримка як тензора, так і словника для GeoCLIP)
+        output = self.forward(x)
+        logits = output["logits"] if isinstance(output, dict) else output
+
+        probs = F.softmax(logits, dim=1)
+        top_probs, top_indices = probs.topk(min(top_k, self.num_classes), dim=1)
+
+        results = []
+        # Беремо перше зображення з батчу
+        for prob, idx in zip(top_probs[0].tolist(), top_indices[0].tolist()):
+            name = class_names[idx] if class_names and idx < len(class_names) else str(idx)
+            results.append({"class": name, "index": idx, "prob": round(prob, 6)})
+
+        return results
+
+
+# ──────────────────────────────────────────────────────────────────────────────
 # 1. BaselineCNN — EfficientNet-B2 з налаштовуваною головою
 # ──────────────────────────────────────────────────────────────────────────────
 
-class BaselineCNN(nn.Module):
+class BaselineCNN(nn.Module, GeoModelMixin):
     """
     Базова CNN-архітектура на основі EfficientNet-B2.
 
@@ -142,46 +188,12 @@ class BaselineCNN(nn.Module):
         feat = feat.flatten(1)
         return self.classifier(feat)
 
-    @torch.no_grad()
-    def predict(
-        self,
-        x: torch.Tensor,
-        class_names: Optional[list[str]] = None,
-        top_k: int = 5,
-    ) -> list[dict]:
-        """
-        Передбачення для одного зображення або батчу.
-
-        Аргументи:
-            x:           Зображення (3, H, W) або батч (N, 3, H, W).
-            class_names: Список назв класів.
-            top_k:       Кількість топ-передбачень.
-
-        Повертає:
-            Список словників [{'class': str, 'index': int, 'prob': float}, ...].
-        """
-        self.eval()
-        if x.ndim == 3:
-            x = x.unsqueeze(0)
-
-        logits = self.forward(x)
-        probs  = F.softmax(logits, dim=1)
-
-        top_probs, top_indices = probs.topk(min(top_k, self.num_classes), dim=1)
-
-        results = []
-        for prob, idx in zip(top_probs[0].tolist(), top_indices[0].tolist()):
-            name = class_names[idx] if class_names and idx < len(class_names) else str(idx)
-            results.append({"class": name, "index": idx, "prob": round(prob, 6)})
-
-        return results
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # 2. StreetCLIPModel — geolocal/StreetCLIP + лінійний пробник
 # ──────────────────────────────────────────────────────────────────────────────
 
-class StreetCLIPModel(nn.Module):
+class StreetCLIPModel(nn.Module, GeoModelMixin):
     """
     Модель на основі StreetCLIP (geolocal/StreetCLIP) з HuggingFace.
 
@@ -269,6 +281,12 @@ class StreetCLIPModel(nn.Module):
             param.requires_grad = True
         logger.info(f"StreetCLIPModel: розморожено {n} останніх шарів + projection")
 
+    def preprocess(self, images) -> torch.Tensor:
+        """
+        Передобробка зображень за допомогою CLIPProcessor.
+        """
+        return self.processor(images=images, return_tensors="pt").pixel_values
+
     def encode_image(self, pixel_values: torch.Tensor) -> torch.Tensor:
         """
         Кодує зображення через CLIP vision encoder.
@@ -308,38 +326,6 @@ class StreetCLIPModel(nn.Module):
         """
         emb = self.encode_image(pixel_values)
         return self.head(emb)
-
-    @torch.no_grad()
-    def predict(
-        self,
-        x: torch.Tensor,
-        class_names: Optional[list[str]] = None,
-        top_k: int = 5,
-    ) -> list[dict]:
-        """
-        Передбачення для зображення або батчу.
-
-        Аргументи:
-            x:           Зображення (3, H, W) або батч (N, 3, H, W).
-            class_names: Список назв класів.
-            top_k:       Кількість топ-передбачень.
-
-        Повертає:
-            Список словників [{'class': str, 'index': int, 'prob': float}, ...].
-        """
-        self.eval()
-        if x.ndim == 3:
-            x = x.unsqueeze(0)
-
-        logits = self.forward(x)
-        probs  = F.softmax(logits, dim=1)
-        top_probs, top_indices = probs.topk(min(top_k, self.num_classes), dim=1)
-
-        results = []
-        for prob, idx in zip(top_probs[0].tolist(), top_indices[0].tolist()):
-            name = class_names[idx] if class_names and idx < len(class_names) else str(idx)
-            results.append({"class": name, "index": idx, "prob": round(prob, 6)})
-        return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -688,38 +674,6 @@ class GeoCLIPModel(nn.Module):
             output["contrastive_loss"] = self.contrastive_loss(img_emb, gps_emb)
 
         return output
-
-    @torch.no_grad()
-    def predict(
-        self,
-        x: torch.Tensor,
-        class_names: Optional[list[str]] = None,
-        top_k: int = 5,
-    ) -> list[dict]:
-        """
-        Передбачення міста/класу для зображення.
-
-        Аргументи:
-            x:           Зображення (3, H, W) або батч (N, 3, H, W).
-            class_names: Список назв класів.
-            top_k:       Кількість топ-передбачень.
-
-        Повертає:
-            Список [{'class': str, 'index': int, 'prob': float}, ...].
-        """
-        self.eval()
-        if x.ndim == 3:
-            x = x.unsqueeze(0)
-
-        out    = self.forward(x)
-        probs  = F.softmax(out["logits"], dim=1)
-        top_probs, top_indices = probs.topk(min(top_k, self.num_classes), dim=1)
-
-        results = []
-        for prob, idx in zip(top_probs[0].tolist(), top_indices[0].tolist()):
-            name = class_names[idx] if class_names and idx < len(class_names) else str(idx)
-            results.append({"class": name, "index": idx, "prob": round(prob, 6)})
-        return results
 
 
 # ──────────────────────────────────────────────────────────────────────────────

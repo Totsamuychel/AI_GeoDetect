@@ -70,7 +70,7 @@ class TestBaselineCNN:
 
     def test_embeddings_allow_gradient(self, model: BaselineCNN) -> None:
         """Перевіряє fix: get_embeddings не повинен блокувати backprop."""
-        x = torch.randn(1, 3, 224, 224, requires_grad=True)
+        x = torch.randn(2, 3, 224, 224, requires_grad=True)
         model.train()
         emb = model.get_embeddings(x)
         loss = emb.sum()
