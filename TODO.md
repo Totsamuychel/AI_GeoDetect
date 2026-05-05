@@ -42,9 +42,9 @@
 ## 🔴 КРИТИЧНО (без цього захист неможливий)
 
 #### 1. Зібрати датасет → див. `TODO_DATASET.md`
-- [ ] Запустити RunPod Pod (PyTorch 2.7 + CUDA 12.8, Volume 20GB)
-- [ ] Завантажити OSV-5M для UA/PL/CZ/HU (~3–6GB)
-- [ ] H3-розбиття 70/15/15 → `data/manifests/train.csv`, `val.csv`, `test.csv`
+- [x] Запустити RunPod Pod (PyTorch 2.7 + CUDA 12.8, Volume 20GB) — *Виконано локально (win32)*
+- [x] Завантажити OSV-5M для UA/PL/RO (~7700 фото)
+- [x] H3-розбиття 70/15/15 → `dataset/manifests/train.csv`, `val.csv`, `test.csv`
 
 #### 2. Запустити навчання
 ```bash
