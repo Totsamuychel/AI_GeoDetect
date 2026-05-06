@@ -1,4 +1,4 @@
-# AI_GeoDetect: Нейромережна модель геолокації за фото на основі вуличної фотографії України
+# AI_GeoDetect: Neural Network Geolocation from Street Photography
 
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-orange.svg)](https://pytorch.org/)
@@ -6,25 +6,71 @@
 
 ---
 
-## Опис проєкту
+## About the Project
 
-Дипломна робота присвячена розробці та порівнянню нейромережних архітектур для автоматичної геолокації вуличних фотографій з акцентом на територію України та суміжних країн Центральної і Східної Європи.
+This is a diploma thesis project focused on developing and comparing neural network architectures for automatic geolocation of street photographs, with an emphasis on Ukraine and neighboring Central and Eastern European countries.
 
-**Задача:** за вхідним зображенням вулиці передбачити географічні координати (широту і довготу) місця зйомки, а також класифікувати знімок за країною та містом.
+**Task:** Given an input street image, predict the geographic coordinates (latitude & longitude) of the shooting location, as well as classify the image by country and city.
 
-**Три досліджувані архітектури:**
+**Three architectures under investigation:**
 
-| Архітектура | Базова модель | Підхід |
+| Architecture | Base Model | Approach |
 |---|---|---|
 | `BaselineCNN` | EfficientNet-B2 | Supervised classification + regression |
-| `StreetCLIP` | CLIP (ViT-L/14) | Fine-tuning з текстовими підказками |
-| `GeoCLIP` | CLIP + GPS encoder | Contrastive learning з GPS-галереєю |
+| `StreetCLIP` | CLIP (ViT-L/14) | Fine-tuning with text prompts |
+| `GeoCLIP` | CLIP + GPS encoder | Contrastive learning with GPS gallery |
 
-**Цільові регіони:** Україна (Київ, Львів, Одеса, Харків, Дніпро) та сусідні країни — Польща, Чехія, Угорщина, Австрія, Румунія, Словаччина.
+**Target regions:** Ukraine (Kyiv, Lviv, Odesa, Kharkiv, Dnipro) and neighboring countries — Poland, Czech Republic, Hungary, Austria, Romania, Slovakia.
 
 ---
 
-## Структура репозиторію
+## 🏗️ Architecture
+
+```mermaid
+graph TD
+    A["🖼️ Street Photo\n(JPG / PNG)"] --> B["🔄 Preprocessing\nResize · Normalize · Augment"]
+
+    B --> C1["📹 EfficientNet-B2\nBaselineCNN"]
+    B --> C2["🧐 CLIP ViT-L/14\nStreetCLIP"]
+    B --> C3["🌍 CLIP + GPS Encoder\nGeoCLIP"]
+
+    C1 --> D1["📍 Regression Head\nlat · lon"]
+    C1 --> D2["🏷️ Classification Head\ncountry · city"]
+
+    C2 --> E1["💬 Text Prompt Matching\ne.g. 'a street in Kyiv, Ukraine'"]
+    E1 --> D1
+    E1 --> D2
+
+    C3 --> E2["📁 GPS Gallery\n(contrastive embeddings)"]
+    E2 --> F["🔍 Nearest Neighbor\nGPS matching"]
+    F --> D1
+
+    D1 --> G["📊 Metrics\nGCD km · Acc@25km · Acc@200km"]
+    D2 --> G
+
+    subgraph Data["📂 Data Pipeline"]
+        J["📡 Mapillary API\n/ Local Photos"] --> K["⚙️ download_data.py\ncities filter"]
+        K --> L["🔀 train / val / test\nCSV splits"]
+        L --> B
+    end
+
+    subgraph Training["🔧 Training"]
+        G --> M["📉 Loss\nMSE + CrossEntropy"]
+        M --> N["🔁 Optimizer\nAdamW + Scheduler"]
+        N --> C1
+        N --> C2
+        N --> C3
+    end
+
+    subgraph Output["📤 Output"]
+        D1 --> O["🗺️ Map Visualization\nvisualize.py"]
+        D1 --> P["📄 JSON Metrics\nevaluate.py"]
+    end
+```
+
+---
+
+## Repository Structure
 
 ```
 diploma/
@@ -34,62 +80,60 @@ diploma/
 ├── .gitignore
 │
 ├── configs/
-│   ├── config.yaml               # Основна конфігурація
+│   ├── config.yaml               # Main configuration
 │   ├── baseline_config.yaml      # EfficientNet-B2 baseline
 │   └── geoclip_config.yaml       # GeoCLIP contrastive
 │
 ├── data/
-│   ├── dataset_manifest_example.csv   # Приклад маніфесту датасету
-│   ├── images/                        # Вхідні зображення (не у git)
-│   └── splits/                        # train/val/test CSV-файли
+│   ├── dataset_manifest_example.csv   # Example dataset manifest
+│   ├── images/                        # Input images (not in git)
+│   └── splits/                        # train/val/test CSV files
 │
 ├── code/
-│   ├── models/                   # Окремі архітектури моделей
-│   ├── notebooks/                # Jupyter notebooks для EDA та експериментів
-│   ├── augmentations.py          # Аугментації зображень
-│   ├── dataset.py                # Класи Dataset та DataLoader
-│   ├── download_data.py          # Завантаження зображень (Mapillary/OSM)
-│   ├── evaluate.py               # Оцінка на тестовій вибірці
-│   ├── inference.py              # Інференс для одного/кількох фото
-│   ├── metrics.py                # Метрики (GCD, Accuracy@km тощо)
-│   ├── models.py                 # Визначення моделей
-│   ├── train.py                  # Головний скрипт тренування
-│   ├── utils.py                  # Допоміжні функції
-│   └── visualize.py              # Побудова карт та графіків
+│   ├── models/                   # Individual model architectures
+│   ├── notebooks/                # Jupyter notebooks for EDA & experiments
+│   ├── augmentations.py          # Image augmentations
+│   ├── dataset.py                # Dataset and DataLoader classes
+│   ├── download_data.py          # Image downloader (Mapillary/OSM)
+│   ├── evaluate.py               # Evaluation on test set
+│   ├── inference.py              # Inference for single/batch photos
+│   ├── metrics.py                # Metrics (GCD, Accuracy@km, etc.)
+│   ├── models.py                 # Model definitions
+│   ├── train.py                  # Main training script
+│   ├── utils.py                  # Helper functions
+│   └── visualize.py              # Map and chart generation
 │
-├── writing/                      # Текстова частина дипломної роботи
+├── writing/                      # Thesis text
 │
 └── results/
-    ├── checkpoints/              # Збережені ваги моделей (не у git)
-    ├── logs/                     # WandB / MLflow / TensorBoard логи
-    └── plots/                    # Збережені графіки та карти
+    ├── checkpoints/              # Saved model weights (not in git)
+    ├── logs/                     # WandB / MLflow / TensorBoard logs
+    └── plots/                    # Saved charts and maps
 ```
 
 ---
 
-## Встановлення залежностей
+## Installation
 
-### Варіант 1: Conda (рекомендовано)
+### Option 1: Conda (Recommended)
 
 ```bash
-# Клонуємо репозиторій
 git clone https://github.com/Totsamuychel/AI_GeoDetect.git
 cd AI_GeoDetect
 
-# Створюємо та активуємо conda-оточення
 conda env create -f environment.yml
 conda activate geo-photo
 
-# Перевіряємо встановлення
+# Verify installation
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 ```
 
-### Варіант 2: pip + virtualenv
+### Option 2: pip + virtualenv
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate       # Linux / macOS
-# або
+# or
 .venv\Scripts\activate          # Windows
 
 pip install --upgrade pip
@@ -98,14 +142,14 @@ pip install -r requirements.txt
 
 ---
 
-## Підготовка даних
+## Data Preparation
 
-### 1. Завантаження зображень
+### 1. Download Images
 
-Скрипт підтримує джерела Mapillary API та локальні директорії з фотографіями.
+The script supports Mapillary API and local photo directories as sources.
 
 ```bash
-# Завантажити зображення для заданих міст через Mapillary API
+# Download images for specified cities via Mapillary API
 python code/download_data.py \
     --source mapillary \
     --cities Kyiv Lviv Odesa Kharkiv Dnipro Warsaw Prague Budapest \
@@ -113,7 +157,7 @@ python code/download_data.py \
     --max-per-city 5000 \
     --mapillary-token YOUR_TOKEN
 
-# Або імпортувати з локальної директорії
+# Or import from a local directory
 python code/download_data.py \
     --source local \
     --input /path/to/raw/photos \
@@ -122,7 +166,7 @@ python code/download_data.py \
 
 ---
 
-## Тренування моделей
+## Training
 
 ### BaselineCNN (EfficientNet-B2)
 
@@ -133,7 +177,7 @@ python code/train.py \
     --experiment baseline_efficientnet_b2
 ```
 
-### StreetCLIP fine-tuning
+### StreetCLIP Fine-tuning
 
 ```bash
 python code/train.py \
@@ -143,7 +187,7 @@ python code/train.py \
     --pretrained openai/clip-vit-large-patch14
 ```
 
-### GeoCLIP (contrastive з GPS-галереєю)
+### GeoCLIP (Contrastive with GPS Gallery)
 
 ```bash
 python code/train.py \
@@ -155,10 +199,9 @@ python code/train.py \
 
 ---
 
-## Оцінка результатів
+## Evaluation
 
 ```bash
-# Оцінити одну модель
 python code/evaluate.py \
     --config configs/config.yaml \
     --checkpoint results/checkpoints/streetclip_best.pth \
@@ -168,7 +211,7 @@ python code/evaluate.py \
 
 ---
 
-## Інференс
+## Inference
 
 ```bash
 python code/inference.py \
@@ -180,17 +223,17 @@ python code/inference.py \
 
 ---
 
-## Ліцензія
+## License
 
-Цей проєкт розповсюджується під ліцензією **MIT**. Дивіться файл [LICENSE](LICENSE) для деталей.
+This project is distributed under the **MIT** License. See the [LICENSE](LICENSE) file for details.
 
 ---
 
-## Цитування
+## Citation
 
 ```bibtex
 @mastersthesis{diploma2026geoloc,
-  title     = {Нейромережна модель геолокації за фото на основі вуличної фотографії України},
+  title     = {Neural Network Geolocation Model from Street Photography of Ukraine},
   author    = {Totsamuychel},
   year      = {2026},
 }
