@@ -4,7 +4,7 @@
 
 data:
   manifest_csv: "data/dataset_manifest.csv"
-  image_root: "data/images/"
+  image_root: "dataset/raw/osv5m/images"
   target_countries: ["UA", "PL", "DE", "CZ", "HU", "AT", "RO", "SK"]
   target_cities: ["Kyiv", "Lviv", "Odesa", "Kharkiv", "Dnipro", "Warsaw", "Prague", "Budapest"]
   quality_threshold: 0.5

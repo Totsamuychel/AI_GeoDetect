@@ -4,8 +4,8 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "data/manifest.csv"
-image_root:         "data/images"
+manifest_path:      "dataset/manifests/train.csv"
+image_root:         "dataset/raw/osv5m/images"
 countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
 quality_threshold:  0.4
 split_method:       "h3"

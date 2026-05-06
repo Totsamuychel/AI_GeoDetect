@@ -3,8 +3,8 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "dataset/raw/osv5m/manifest.csv"
-image_root:         "dataset/raw/osv5m"
+manifest_path:      "dataset/manifests/train.csv"
+image_root:         "dataset/raw/osv5m/images"
 countries:          
   - "UA"
   - "PL"
