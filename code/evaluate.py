@@ -2,7 +2,7 @@
 evaluate.py — Оцінка навченої моделі на тестовому наборі даних.
 
 Обчислює:
-- Top-1 та Top-5 точність (classification accuracy)
+- Top-1 точність, macro-F1, balanced accuracy (classification)
 - Середню та медіанну відстань Гаверсина (км)
 - GeoScore (5000 * exp(-d / 1492.7))
 - Точність по класах (per-class accuracy table)
@@ -33,9 +33,11 @@ from torch.utils.data import DataLoader
 from augmentations import get_val_transforms, get_norm_for
 from dataset import GeoDataset
 from metrics import (
+    balanced_accuracy,
     compute_all_metrics,
     geoscore,
     haversine_distance,
+    macro_f1,
     top_k_accuracy,
 )
 from models import build_model
@@ -122,7 +124,8 @@ class EvalResult:
 
     # Класифікація
     top1_accuracy:      float
-    top5_accuracy:      float
+    macro_f1:           float
+    balanced_accuracy:  float
 
     # Геолокація
     mean_distance_km:   float
@@ -291,7 +294,8 @@ def evaluate(
     logger.info("Обчислення метрик...")
 
     top1 = top_k_accuracy(all_logits, all_labels, k=1)
-    top5 = top_k_accuracy(all_logits, all_labels, k=min(5, num_classes))
+    mf1  = macro_f1(all_logits, all_labels)
+    bacc = balanced_accuracy(all_logits, all_labels)
 
     distances = haversine_distance(
         all_pred_coords[:, 0], all_pred_coords[:, 1],
@@ -323,7 +327,8 @@ def evaluate(
         f"{'='*55}\n"
         f"  Тестовий набір:         {len(test_dataset)} зображень\n"
         f"  Top-1 Accuracy:         {top1*100:.2f}%\n"
-        f"  Top-5 Accuracy:         {top5*100:.2f}%\n"
+        f"  Macro-F1:               {mf1*100:.2f}%\n"
+        f"  Balanced Accuracy:      {bacc*100:.2f}%\n"
         f"  Mean Distance:          {mean_dist:.1f} км\n"
         f"  Median Distance:        {median_dist:.1f} км\n"
         f"  90-й перцентиль:        {p90_dist:.1f} км\n"
@@ -350,7 +355,8 @@ def evaluate(
         num_classes=num_classes,
         num_test_samples=len(test_dataset),
         top1_accuracy=top1,
-        top5_accuracy=top5,
+        macro_f1=mf1,
+        balanced_accuracy=bacc,
         mean_distance_km=mean_dist,
         median_distance_km=median_dist,
         p25_distance_km=p25_dist,
@@ -517,7 +523,8 @@ def main() -> None:
 
     print(f"\n✓ Оцінка завершена:")
     print(f"  Top-1: {result.top1_accuracy*100:.2f}%")
-    print(f"  Top-5: {result.top5_accuracy*100:.2f}%")
+    print(f"  Macro-F1: {result.macro_f1*100:.2f}%")
+    print(f"  Balanced Acc: {result.balanced_accuracy*100:.2f}%")
     print(f"  Mean Distance: {result.mean_distance_km:.1f} км")
     print(f"  GeoScore: {result.mean_geoscore:.1f}")
 

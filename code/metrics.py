@@ -243,6 +243,54 @@ def top_k_accuracy_torch(
         return correct.mean()
 
 
+def _logits_labels_to_preds(
+    logits: Union[np.ndarray, torch.Tensor],
+    labels: Union[np.ndarray, torch.Tensor],
+) -> tuple[np.ndarray, np.ndarray]:
+    """(logits, labels) → (pred_indices, labels) як int64 numpy-масиви."""
+    if isinstance(logits, torch.Tensor):
+        logits_np = logits.detach().cpu().numpy()
+    else:
+        logits_np = np.asarray(logits)
+    if isinstance(labels, torch.Tensor):
+        labels_np = labels.detach().cpu().numpy().astype(np.int64)
+    else:
+        labels_np = np.asarray(labels, dtype=np.int64)
+    return np.argmax(logits_np, axis=1).astype(np.int64), labels_np
+
+
+def macro_f1(
+    logits: Union[np.ndarray, torch.Tensor],
+    labels: Union[np.ndarray, torch.Tensor],
+) -> float:
+    """
+    Macro-усереднений F1 (однаковий ваговий внесок кожного класу).
+
+    Інформативніший за top-5 для задачі з малою кількістю класів.
+    """
+    from sklearn.metrics import f1_score
+
+    preds, labels_np = _logits_labels_to_preds(logits, labels)
+    if len(labels_np) == 0:
+        return 0.0
+    return float(f1_score(labels_np, preds, average="macro", zero_division=0))
+
+
+def balanced_accuracy(
+    logits: Union[np.ndarray, torch.Tensor],
+    labels: Union[np.ndarray, torch.Tensor],
+) -> float:
+    """
+    Balanced accuracy — середнє recall по класах (стійке до дисбалансу).
+    """
+    from sklearn.metrics import balanced_accuracy_score
+
+    preds, labels_np = _logits_labels_to_preds(logits, labels)
+    if len(labels_np) == 0:
+        return 0.0
+    return float(balanced_accuracy_score(labels_np, preds))
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Зведені метрики для оцінки
 # ──────────────────────────────────────────────────────────────────────────────
@@ -254,7 +302,8 @@ def compute_all_metrics(
     true_coords: Union[np.ndarray, torch.Tensor],
 ) -> dict[str, float]:
     """
-    Обчислює всі метрики одночасно: Top-1, Top-5, Haversine-відстань, GeoScore.
+    Обчислює всі метрики одночасно: Top-1, Top-5, macro-F1, balanced accuracy,
+    Haversine-відстань, GeoScore.
 
     Аргументи:
         logits:      Логіти класифікатора (N, C).
@@ -267,6 +316,8 @@ def compute_all_metrics(
         {
             "top1_acc": float,
             "top5_acc": float,
+            "macro_f1": float,
+            "balanced_acc": float,
             "mean_distance_km": float,
             "median_distance_km": float,
             "mean_geoscore": float,
@@ -278,6 +329,8 @@ def compute_all_metrics(
     return {
         "top1_acc":           top_k_accuracy(logits, labels, k=1),
         "top5_acc":           top_k_accuracy(logits, labels, k=5),
+        "macro_f1":           macro_f1(logits, labels),
+        "balanced_acc":       balanced_accuracy(logits, labels),
         "mean_distance_km":   float(np.mean(distances)),
         "median_distance_km": float(np.median(distances)),
         "mean_geoscore":      float(np.mean(scores)),

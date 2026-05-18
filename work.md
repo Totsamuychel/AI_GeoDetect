@@ -1,130 +1,156 @@
 # Work Notes - AI_GeoDetect Diploma Project
 
-## ✅ ИСПРАВЛЕНО (2026-05-08)
+Контекст проекта
+Проект: AI_GeoDetect — геолокация уличных фото нейросетью.
+Стек: Python 3.10, PyTorch, OSV-5M (HuggingFace), Mapillary (ZenSVI), osmnx, H3.
+Цель датасета: классификация по 3 городам (Kyiv / Warsaw / Prague).
+Целевой размер: докачать уже к готовым фото ~2000–2500 фото на город, итого ~10 000 фото.
+Критерий качества: только городская застройка, без трасс, пригородов, полей.
 
-### 1. Data Quality Issue - City Labels Fixed
-**Проблема:** Манифесты содержали коды стран ("PL", "UA") вместо названий городов.
 
-**Решение:** Создан скрипт `scripts/fix_city_labels.py`:
-- Использует Nominatim reverse geocoding для определения городов по координатам
-- Нормализует названия (Київ → Kyiv, Warszawa → Warsaw)
-- Фильтрует по целевым городам (Kyiv, Lviv, Warsaw, Prague, Budapest и др.)
-- Кэширует результаты в `dataset/.cache/geocode_cache.csv`
+ЭТАП 1: Получить точные полигоны городов через OSM
+Важно: используем реальные границы города (не bbox-прямоугольники) — это исключит пригороды и трассы за городом.
 
-**Использование:**
-```bash
-python scripts/fix_city_labels.py \
-    --input dataset/raw/osv5m/manifest.csv \
-    --output dataset/raw/osv5m/manifest_fixed.csv
-```
+Создай файл scripts/01_get_city_polygons.py:
 
-### 2. Missing Analysis Notebooks - Created
-**Проблема:** Отсутствовали ноутбуки для анализа результатов обучения.
+python
+import osmnx as ox
+import json, os
 
-**Решение:** Созданы два новых ноутбука:
+CITIES = {
+    "kyiv":   "Kyiv, Ukraine",
+    "warsaw": "Warsaw, Poland",
+    "prague": "Prague, Czech Republic",
+}
 
-#### `notebooks/02_training_curves.ipynb`
-- Визуализация кривых обучения (loss, accuracy)
-- Geospatial metrics (Haversine, GeoScore)
-- Learning rate schedule
-- Сравнительная таблица моделей
+os.makedirs("dataset/raw/boundaries", exist_ok=True)
 
-#### `notebooks/03_error_analysis.ipynb`
-- Confusion matrix
-- Per-class performance analysis
-- Geographic error analysis
-- **t-SNE visualization of embeddings** ⭐
-- Error heatmap on interactive map
-- Example predictions (success/failure)
+for city_key, city_name in CITIES.items():
+    print(f"📍 Получаем полигон: {city_name}")
+    gdf = ox.geocode_to_gdf(city_name)
+    geojson = json.loads(gdf.to_json())
+    with open(f"dataset/raw/boundaries/{city_key}.geojson", "w") as f:
+        json.dump(geojson, f)
+    bounds = gdf.total_bounds  # [minx, miny, maxx, maxy]
+    print(f"   bbox: lat [{bounds[1]:.3f}, {bounds[3]:.3f}], lon [{bounds[0]:.3f}, {bounds[2]:.3f}]")
+    print(f"   ✅ Сохранён: dataset/raw/boundaries/{city_key}.geojson")
 
-**Генерируемые файлы для диплома:**
-- `results/plots/loss_curves.png`
-- `results/plots/accuracy_curves.png`
-- `results/plots/confusion_matrix.png`
-- `results/plots/tsne_embeddings.png`
-- `results/plots/error_heatmap.html`
-- `results/model_comparison.csv`
+print("\n✅ Все полигоны получены")
+Запустить:
 
-### 3. Documentation - Usage Guide
-Создан `USAGE_GUIDE.md` с подробными инструкциями:
-- Как исправить метки городов
-- Как запустить ноутбуки для анализа
-- Типичный workflow для диплома
-- Устранение проблем
-- Полезные команды
+bash
+python scripts/01_get_city_polygons.py
+ЭТАП 2: Скачать метаданные OSV-5M и отфильтровать по полигонам
+Создай файл scripts/02_filter_osv5m.py:
 
----
+python
+import pandas as pd
+import json
+from shapely.geometry import Point, shape
+from huggingface_hub import hf_hub_download
+import os
 
-## ⚠️ ТЕХНИЧЕСКИЕ ЗАМЕТКИ (TODO)
+HF_TOKEN = os.environ["HF_TOKEN"]
+REPO_ID = "osv5m/osv5m"
 
-### 1. train.py — sys.path не добавлен (критично)
-train.py импортирует from augmentations import ... без sys.path . Добавь в самое начало файла, сразу после from __future__ import annotations:
+# --- Загрузить полигоны ---
+city_polygons = {}
+for city in ["kyiv", "warsaw", "prague"]:
+    with open(f"dataset/raw/boundaries/{city}.geojson") as f:
+        gj = json.load(f)
+    # Берём первую геометрию из FeatureCollection
+    geom = gj["features"][0]["geometry"]
+    city_polygons[city] = shape(geom)
+    print(f"✅ Полигон {city} загружен")
 
-```python
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-```
+# --- Скачать parquet метаданные OSV-5M ---
+print("\n📦 Скачиваем метаданные OSV-5M...")
+for split in ["train", "val", "test"]:
+    path = f"dataset/raw/osv5m/{split}.parquet"
+    if not os.path.exists(path):
+        hf_hub_download(
+            repo_id=REPO_ID,
+            filename=f"{split}.parquet",
+            repo_type="dataset",
+            local_dir="dataset/raw/osv5m",
+            token=HF_TOKEN
+        )
+        print(f"  ✅ {split}.parquet скачан")
+    else:
+        print(f"  ⏭️  {split}.parquet уже есть")
 
-### 2. train.py — дефолтные пути в TrainConfig и argparse всё ещё data/ (важно)
-Строки 74–75 и ~430 — конфиги YAML ты обновил, но если кто-то запустит без --config или через argparse напрямую, возьмутся старые дефолты:
+# --- Фильтрация ---
+frames = []
 
-```python
-# В dataclass TrainConfig:
-manifest_path: str = "dataset/manifests/train.csv"   # было data/manifest.csv
-image_root:    str = "dataset/raw/osv5m/images"       # было data/images
+for split in ["train", "val", "test"]:
+    df = pd.read_parquet(f"dataset/raw/osv5m/{split}.parquet")
+    print(f"\n📊 {split}: {len(df):,} строк")
 
-# В argparse:
-parser.add_argument("--manifest", default="dataset/manifests/train.csv")
-parser.add_argument("--image-root", default="dataset/raw/osv5m/images")
-```
+    for city, polygon in city_polygons.items():
+        # Грубая pre-фильтрация по bbox (быстро)
+        bounds = polygon.bounds  # (minx, miny, maxx, maxy)
+        pre = df[
+            df["latitude"].between(bounds[1], bounds[3]) &
+            df["longitude"].between(bounds[0], bounds[2])
+        ].copy()
+        print(f"  {city}: {len(pre)} после bbox-фильтра...", end="")
 
-### 3. train.py — train_frac / val_frac не передаются в create_dataloaders (логика)
-В функции train() вызов create_dataloaders() не передаёт эти параметры, используются дефолты 0.7/0.15. Если в конфиге нет этих полей — это ок, но лучше явно:
+        # Точная фильтрация по полигону
+        mask = pre.apply(
+            lambda r: polygon.contains(Point(r["longitude"], r["latitude"])),
+            axis=1
+        )
+        sub = pre[mask].copy()
+        sub["city"] = city
+        sub["source"] = "osv5m"
+        frames.append(sub)
+        print(f" → {len(sub)} внутри полигона ✅")
 
-```python
-dataloaders = create_dataloaders(
-    ...
-    train_frac=getattr(config, 'train_frac', 0.7),
-    val_frac=getattr(config, 'val_frac', 0.15),
-)
-```
+result = pd.concat(frames, ignore_index=True)
+result = result.drop_duplicates(subset=["id"])
+result.to_parquet("dataset/raw/osv5m/filtered_cities.parquet", index=False)
 
-### 4. Создать пустой code/__init__.py (опционально, но хорошая практика)
-```bash
-touch code/__init__.py
-```
+print(f"\n📊 Итого OSV-5M после фильтрации по полигонам:")
+print(result["city"].value_counts())
+print(f"\nВсего: {len(result):,} фото")
+Запустить:
 
----
+bash
+python scripts/02_filter_osv5m.py
+Ожидаемый результат:
 
-## 🎯 NEXT STEPS
+text
+kyiv:   ~800–1500 фото
+warsaw: ~600–1200 фото
+prague: ~500–1000 фото
+ЭТАП 3: Скачать изображения OSV-5M (только нужные шарды)
+Создай файл scripts/03_download_osv5m_images.py:
 
-### Критические задачи для защиты диплома:
+python
+import pandas as pd
+from huggingface_hub import hf_hub_download
+import zipfile, os, shutil
+from tqdm import tqdm
 
-1. **Исправить манифесты с правильными метками городов:**
-   ```bash
-   python scripts/fix_city_labels.py \
-       --input dataset/raw/osv5m/manifest.csv \
-       --output dataset/raw/osv5m/manifest_fixed.csv
+df = pd.read_parquet("dataset/raw/osv5m/filtered_cities.parquet")
+HF_TOKEN = os.environ["HF_TOKEN"]
 
-   python scripts/generate_manifests.py \
-       --input dataset/raw/osv5m/manifest_fixed.csv \
-       --output-dir dataset/manifests
-   ```
+# Определяем нужные шарды (первые 2 символа ID)
+needed_shards = set(df["id"].astype(str).str.zfill(8).str[:2].unique())
+print(f"📦 Нужно шардов: {len(needed_shards)} → {sorted(needed_shards)}")
 
-2. **Обучить все три модели:**
-   ```bash
-   python code/train.py --config configs/baseline.yaml
-   python code/train.py --config configs/streetclip.yaml
-   python code/train.py --config configs/geoclip.yaml
-   ```
+valid_ids = set(df["id"].astype(str).values)
+downloaded = 0
 
-3. **Провести анализ в ноутбуках:**
-   ```bash
-   jupyter notebook notebooks/02_training_curves.ipynb
-   jupyter notebook notebooks/03_error_analysis.ipynb
-   ```
-
-4. **Экспортировать результаты для диплома:**
-   - Графики из `results/plots/`
-   - Таблицу сравнения из `results/model_comparison.csv`
-   - t-SNE визуализацию для главы "Анализ результатов"
+for shard_id in tqdm(sorted(needed_shards), desc="Шарды"):
+    try:
+        zip_path = hf_hub_download(
+            repo_id="osv5m/osv5m",
+            filename=f"images/{shard_id}.zip",
+            repo_type="dataset",
+            local_dir="dataset/raw/osv5m",
+            token=HF_TOKEN
+        )
+        with zipfile.ZipFile(zip_path, "r") as z:
+            for member in z.namelist():
+                img_id = os.path.splitext(os.path.basename(member))[0]

@@ -3,12 +3,12 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "dataset/manifests/train.csv"
-image_root:         "dataset/raw/osv5m/images"
-countries:          
-  - "UA"
+manifest_path:      "dataset/raw/mapillary/manifest.csv"
+image_root:         "dataset"
+countries:
   - "PL"
-  - "RO"
+  - "CZ"
+  - "HU"
 quality_threshold:  0.0
 split_method:       "h3"
 h3_resolution:      7

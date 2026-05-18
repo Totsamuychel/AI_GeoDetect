@@ -124,6 +124,7 @@ class BaselineCNN(nn.Module, GeoModelMixin):
             nn.Linear(512, num_classes),
         )
 
+        self._backbone_frozen = False
         if freeze_backbone:
             self.freeze_backbone()
 
@@ -131,6 +132,8 @@ class BaselineCNN(nn.Module, GeoModelMixin):
         """Заморожує всі шари backbone (крім класифікатора)."""
         for param in self.features.parameters():
             param.requires_grad = False
+        self._backbone_frozen = True
+        self.features.eval()  # BN/Dropout замороженого backbone — в eval
         logger.info("BaselineCNN: backbone заморожено")
 
     def unfreeze_last_n_blocks(self, n: int = 2) -> None:
@@ -144,8 +147,20 @@ class BaselineCNN(nn.Module, GeoModelMixin):
         for block in blocks[-n:]:
             for param in block.parameters():
                 param.requires_grad = True
+        self._backbone_frozen = False
         trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
         logger.info(f"BaselineCNN: розморожено {n} блоків, {trainable:,} навчальних параметрів")
+
+    def train(self, mode: bool = True) -> "BaselineCNN":
+        """
+        Як nn.Module.train, але замороженого backbone тримаємо в eval —
+        інакше BatchNorm EfficientNet оновлює running-статистики на малому
+        датасеті, псуючи предобучені ImageNet-фічі.
+        """
+        super().train(mode)
+        if getattr(self, "_backbone_frozen", False):
+            self.features.eval()
+        return self
 
     def get_embeddings(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -468,6 +483,32 @@ class GeoCLIPModel(nn.Module):
         # ── GPS Gallery (для retrieval на inference) ─────────────────────────
         self.register_buffer("gallery_coords", torch.zeros(0, 2))
         self.register_buffer("gallery_embeddings", torch.zeros(0, embed_dim))
+
+    # ──────────────────────────────────────────────────────────────────────
+    # Тонке налаштування CLIP
+    # ──────────────────────────────────────────────────────────────────────
+
+    def unfreeze_last_n_layers(self, n: int = 2) -> None:
+        """
+        Розморожує останні n трансформерних шарів CLIP ViT + visual_projection.
+
+        Без цього виклику CLIP лишається замороженим і Стадія 2 для GeoCLIP
+        нічому не вчить backbone (див. train.py двоетапне навчання).
+
+        Аргументи:
+            n: Кількість останніх encoder-шарів ViT для розморожування.
+        """
+        encoder_layers = self.vision_model.encoder.layers
+        for layer in encoder_layers[-n:]:
+            for param in layer.parameters():
+                param.requires_grad = True
+        for param in self.visual_projection.parameters():
+            param.requires_grad = True
+        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        logger.info(
+            f"GeoCLIPModel: розморожено {n} останніх шарів ViT + projection, "
+            f"{trainable:,} навчальних параметрів"
+        )
 
     # ──────────────────────────────────────────────────────────────────────
     # Нормалізація координат

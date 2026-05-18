@@ -328,9 +328,17 @@ class GeoDataset(Dataset):
 
         return Image.open(full_path).convert("RGB")
 
-    def _get_fallback_image(self, img_size: int = 224) -> torch.Tensor:
-        """Повертає чорний тензор як запасний варіант при помилці."""
-        return torch.zeros(3, img_size, img_size)
+    def _get_fallback_image(self) -> torch.Tensor:
+        """
+        Чорне зображення як запасний варіант при помилці завантаження.
+
+        Прогоняємо його через self.transform, щоб форма і нормалізація
+        збігалися зі звичайними елементами при будь-якому img_size
+        (інакше default_collate впаде на мішанині розмірів, напр. 260 vs 224).
+        """
+        if self.transform is not None:
+            return self.transform(Image.new("RGB", (512, 512)))
+        return torch.zeros(3, 224, 224)
 
     # ──────────────────────────────────────────────────────────────────────
     # Dataset API

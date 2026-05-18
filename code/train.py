@@ -37,7 +37,7 @@ from torch.utils.data import DataLoader
 
 from augmentations import get_train_transforms, get_val_transforms, get_norm_for
 from dataset import GeoDataset, create_dataloaders
-from metrics import top_k_accuracy_torch
+from metrics import top_k_accuracy_torch, macro_f1, balanced_accuracy
 from models import build_model
 from utils import get_device, seed_everything, count_parameters, format_param_count
 
@@ -521,13 +521,17 @@ def validate(
     all_labels = torch.cat(all_labels, dim=0)
 
     top1 = top_k_accuracy_torch(all_logits, all_labels, k=1).item()
-    top5 = top_k_accuracy_torch(all_logits, all_labels, k=min(5, all_logits.shape[1])).item()
+    # top-5 безглуздий при малій кількості класів (=1.0); macro-F1 /
+    # balanced accuracy інформативні й захищувані для диплома.
+    mf1 = macro_f1(all_logits, all_labels)
+    bacc = balanced_accuracy(all_logits, all_labels)
     n = len(all_labels)
 
     return {
-        "loss":     total_loss / max(n, 1),
-        "top1_acc": top1,
-        "top5_acc": top5,
+        "loss":         total_loss / max(n, 1),
+        "top1_acc":     top1,
+        "macro_f1":     mf1,
+        "balanced_acc": bacc,
     }
 
 
@@ -673,7 +677,8 @@ def train(config: TrainConfig) -> nn.Module:
                 f"train_acc={train_metrics['acc']:.4f} | "
                 f"val_loss={val_metrics['loss']:.4f} "
                 f"val_top1={val_metrics['top1_acc']:.4f} "
-                f"val_top5={val_metrics['top5_acc']:.4f} | "
+                f"val_f1={val_metrics['macro_f1']:.4f} "
+                f"val_bacc={val_metrics['balanced_acc']:.4f} | "
                 f"lr={current_lr:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
             )
 
@@ -683,7 +688,8 @@ def train(config: TrainConfig) -> nn.Module:
                 "train/acc":      train_metrics["acc"],
                 "val/loss":       val_metrics["loss"],
                 "val/top1_acc":   val_metrics["top1_acc"],
-                "val/top5_acc":   val_metrics["top5_acc"],
+                "val/macro_f1":   val_metrics["macro_f1"],
+                "val/balanced_acc": val_metrics["balanced_acc"],
                 "lr":             current_lr,
                 "gpu_gb":         gpu_gb,
                 "stage":          1,
@@ -720,21 +726,28 @@ def train(config: TrainConfig) -> nn.Module:
             elif hasattr(model, "unfreeze_last_n_layers"):
                 model.unfreeze_last_n_layers(config.stage2_unfreeze_n)
 
-        # Диференціальні lr: backbone отримує нижчий lr
+        # Диференціальні lr: предобучений backbone — нижчий lr, нові
+        # модулі (gps_encoder, classifier/head, img_proj, log_temperature) —
+        # повний stage2_lr. "backbone" визначаємо за іменами шарів
+        # предобучених енкодерів (CLIP ViT / EfficientNet).
+        BACKBONE_KEYS = ("vision_model", "visual_projection", "features")
         head_params = []
         backbone_params = []
         for name, param in model.named_parameters():
             if not param.requires_grad:
                 continue
-            if any(key in name for key in ["classifier", "head", "fc"]):
-                head_params.append(param)
-            else:
+            if any(key in name for key in BACKBONE_KEYS):
                 backbone_params.append(param)
+            else:
+                head_params.append(param)
 
-        param_groups = [
-            {"params": head_params,     "lr": config.stage2_lr},
-            {"params": backbone_params, "lr": config.stage2_lr * 0.1},
-        ]
+        param_groups = []
+        if head_params:
+            param_groups.append({"params": head_params, "lr": config.stage2_lr})
+        if backbone_params:
+            param_groups.append(
+                {"params": backbone_params, "lr": config.stage2_lr * 0.1}
+            )
 
         optimizer = AdamW(param_groups, weight_decay=config.weight_decay)
         scheduler = build_warmup_cosine(
@@ -768,7 +781,8 @@ def train(config: TrainConfig) -> nn.Module:
                 f"train_acc={train_metrics['acc']:.4f} | "
                 f"val_loss={val_metrics['loss']:.4f} "
                 f"val_top1={val_metrics['top1_acc']:.4f} "
-                f"val_top5={val_metrics['top5_acc']:.4f} | "
+                f"val_f1={val_metrics['macro_f1']:.4f} "
+                f"val_bacc={val_metrics['balanced_acc']:.4f} | "
                 f"lr={current_lr:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
             )
 
@@ -778,7 +792,8 @@ def train(config: TrainConfig) -> nn.Module:
                 "train/acc":      train_metrics["acc"],
                 "val/loss":       val_metrics["loss"],
                 "val/top1_acc":   val_metrics["top1_acc"],
-                "val/top5_acc":   val_metrics["top5_acc"],
+                "val/macro_f1":   val_metrics["macro_f1"],
+                "val/balanced_acc": val_metrics["balanced_acc"],
                 "lr":             current_lr,
                 "gpu_gb":         gpu_gb,
                 "stage":          2,

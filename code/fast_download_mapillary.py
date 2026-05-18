@@ -53,6 +53,8 @@ log = logging.getLogger(__name__)
 
 CITY_BBOXES: dict[str, tuple[float, float, float, float]] = {
     "kyiv":        (50.35, 30.25, 50.55, 30.75),
+    "warsaw":      (52.10, 20.85, 52.35, 21.15),
+    "prague":      (49.95, 14.25, 50.15, 14.65),
     "lviv":        (49.78, 23.92, 49.88, 24.12),
     "odesa":       (46.38, 30.62, 46.55, 30.82),
     "kharkiv":     (49.90, 36.15, 50.10, 36.40),
@@ -75,6 +77,7 @@ CITY_BBOXES: dict[str, tuple[float, float, float, float]] = {
 }
 
 PRESETS = {
+    "target-cities": ["kyiv", "warsaw", "prague"],
     "ukraine-cities": [
         "kyiv", "lviv", "odesa", "kharkiv", "dnipro",
     ],

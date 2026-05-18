@@ -22,8 +22,8 @@ stage1_unfreeze_n:  0
 
 # ── Стадія 2: Розморожування останніх блоків CLIP ────────────────────────────
 stage2_epochs:      18
-stage2_lr:          0.000005        # дуже низький lr для CLIP backbone
-stage2_unfreeze_n:  4                # кількість transformer блоків ViT для розморожування
+stage2_lr:          0.0001          # gps/classifier=1e-4, CLIP backbone=1e-5 (0.1x)
+stage2_unfreeze_n:  4                # к-сть останніх ViT-шарів CLIP для розморожування
 
 # ── Оптимізатор / регуляризація ──────────────────────────────────────────────
 weight_decay:       0.01

@@ -655,7 +655,7 @@ def plot_distance_distribution(
 
 def plot_model_comparison(
     results: dict[str, dict],
-    metrics: list[str] = ("top1_accuracy", "top5_accuracy", "mean_geoscore"),
+    metrics: list[str] = ("top1_accuracy", "macro_f1", "mean_geoscore"),
     figsize: tuple[int, int] = (14, 5),
     save_path: Optional[str] = None,
 ) -> plt.Figure:
@@ -673,9 +673,9 @@ def plot_model_comparison(
 
     Приклад:
         results = {
-            "BaselineCNN":  {"top1_accuracy": 0.72, "mean_geoscore": 3200},
-            "StreetCLIP":   {"top1_accuracy": 0.81, "mean_geoscore": 3800},
-            "GeoCLIP":      {"top1_accuracy": 0.85, "mean_geoscore": 4100},
+            "BaselineCNN":  {"top1_accuracy": 0.72, "macro_f1": 0.70, "mean_geoscore": 3200},
+            "StreetCLIP":   {"top1_accuracy": 0.81, "macro_f1": 0.80, "mean_geoscore": 3800},
+            "GeoCLIP":      {"top1_accuracy": 0.85, "macro_f1": 0.84, "mean_geoscore": 4100},
         }
     """
     model_names = list(results.keys())
@@ -683,7 +683,8 @@ def plot_model_comparison(
 
     metric_labels = {
         "top1_accuracy":      "Top-1 Accuracy",
-        "top5_accuracy":      "Top-5 Accuracy",
+        "macro_f1":           "Macro-F1",
+        "balanced_accuracy":  "Balanced Accuracy",
         "mean_geoscore":      "Mean GeoScore",
         "mean_distance_km":   "Mean Distance (km)",
         "median_distance_km": "Median Distance (km)",
@@ -794,9 +795,9 @@ if __name__ == "__main__":
 
         # Порівняння моделей
         comparison = {
-            "BaselineCNN":  {"top1_accuracy": 0.72, "top5_accuracy": 0.91, "mean_geoscore": 3200},
-            "StreetCLIP":   {"top1_accuracy": 0.81, "top5_accuracy": 0.95, "mean_geoscore": 3800},
-            "GeoCLIP":      {"top1_accuracy": 0.85, "top5_accuracy": 0.97, "mean_geoscore": 4100},
+            "BaselineCNN":  {"top1_accuracy": 0.72, "macro_f1": 0.70, "mean_geoscore": 3200},
+            "StreetCLIP":   {"top1_accuracy": 0.81, "macro_f1": 0.80, "mean_geoscore": 3800},
+            "GeoCLIP":      {"top1_accuracy": 0.85, "macro_f1": 0.84, "mean_geoscore": 4100},
         }
         fig = plot_model_comparison(
             comparison,
