@@ -1,3 +1,9 @@
+# =============================================================================
+# LEGACY / LOCAL ONLY (Windows or CPU dev). DO NOT use on RunPod RTX 5090.
+# The pinned pytorch=2.1 / cuda 11.8 below WILL NOT run on Blackwell (sm_120).
+# On RunPod use a PyTorch >= 2.7 / CUDA 12.8 base image + `pip install -r
+# requirements.txt` (see scripts/runpod_setup.sh).
+# =============================================================================
 name: geo-photo
 channels:
   - pytorch

@@ -517,6 +517,68 @@ def create_dataloaders(
     if val_transform is None:
         val_transform = get_val_transforms()
 
+    def _make_loader(ds: GeoDataset, shuffle: bool) -> DataLoader:
+        return DataLoader(
+            ds,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            num_workers=num_workers,
+            pin_memory=pin_memory and torch.cuda.is_available(),
+            drop_last=shuffle,  # drop_last лише для тренування
+            persistent_workers=num_workers > 0,
+        )
+
+    # ── Готові (pre-built) маніфести: train.csv + сусідні val.csv/test.csv ──
+    # Розбиття вже зроблено офлайн (scripts/06_build_mapillary_splits.py)
+    # геоблочним методом без витоку — тут лише завантажуємо файли як є.
+    if split_method == "prebuilt":
+        base = Path(manifest_path)
+        parent = base.parent
+        paths = {
+            "train": base,
+            "val":   parent / "val.csv",
+            "test":  parent / "test.csv",
+        }
+        datasets: dict[str, GeoDataset] = {}
+        for split, (tf, mf) in {
+            "train": (train_transform, paths["train"]),
+            "val":   (val_transform,   paths["val"]),
+            "test":  (val_transform,   paths["test"]),
+        }.items():
+            datasets[split] = GeoDataset(
+                manifest_path=mf,
+                transform=tf,
+                countries=countries,
+                cities=cities,
+                quality_threshold=quality_threshold,
+                image_root=image_root,
+            )
+
+        # Єдине відображення місто→індекс по об'єднанню всіх трьох сплітів,
+        # щоб class_names/num_classes збігалися між train/val/test.
+        all_cities = sorted(
+            set().union(*[set(ds.df["city"].dropna().unique())
+                          for ds in datasets.values()])
+        )
+        city_to_idx = {c: i for i, c in enumerate(all_cities)}
+        for ds in datasets.values():
+            ds.class_names = list(all_cities)
+            ds._city_to_idx = dict(city_to_idx)
+            ds.num_classes = len(all_cities)
+
+        logger.info(
+            f"Prebuilt спліти: train={len(datasets['train'])}, "
+            f"val={len(datasets['val'])}, test={len(datasets['test'])}, "
+            f"класів={len(all_cities)} ({all_cities})"
+        )
+        return {
+            "train": _make_loader(datasets["train"], shuffle=True),
+            "val":   _make_loader(datasets["val"],   shuffle=False),
+            "test":  _make_loader(datasets["test"],  shuffle=False),
+            "num_classes": len(all_cities),
+            "class_names": list(all_cities),
+        }
+
     # Повний датасет для обчислення розбиття
     full_dataset = GeoDataset(
         manifest_path=manifest_path,
@@ -575,17 +637,6 @@ def create_dataloaders(
     test_ds.class_names = full_dataset.class_names
     test_ds._city_to_idx = full_dataset._city_to_idx
     test_ds.num_classes = full_dataset.num_classes
-
-    def _make_loader(ds: GeoDataset, shuffle: bool) -> DataLoader:
-        return DataLoader(
-            ds,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            num_workers=num_workers,
-            pin_memory=pin_memory and torch.cuda.is_available(),
-            drop_last=shuffle,  # drop_last лише для тренування
-            persistent_workers=num_workers > 0,
-        )
 
     return {
         "train": _make_loader(train_ds, shuffle=True),

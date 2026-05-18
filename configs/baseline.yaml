@@ -4,11 +4,11 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "dataset/manifests/train.csv"
-image_root:         "dataset/raw/osv5m/images"
-countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
-quality_threshold:  0.4
-split_method:       "h3"          # 'h3' або 'kmeans'
+manifest_path:      "dataset/manifests/train.csv"   # + сусідні val.csv/test.csv
+image_root:         "dataset"
+countries:          ["PL", "CZ", "HU"]
+quality_threshold:  0.0
+split_method:       "prebuilt"    # готові спліти (scripts/06_…); без витоку
 img_size:           260           # нативна роздільна здатність EfficientNet-B2
 
 # ── Архітектура ──────────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ stage2_unfreeze_n:  3             # кількість блоків EfficientNet
 
 # ── Оптимізатор / регуляризація ──────────────────────────────────────────────
 weight_decay:       0.01
-batch_size:         32
-num_workers:        4
+batch_size:         64           # 5090 32GB: EfficientNet-B2 @260px
+num_workers:        8
 grad_clip:          1.0
 
 # ── Early stopping ───────────────────────────────────────────────────────────

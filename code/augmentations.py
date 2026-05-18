@@ -24,6 +24,27 @@ from torchvision.transforms import InterpolationMode
 IMAGENET_MEAN: Tuple[float, float, float] = (0.485, 0.456, 0.406)
 IMAGENET_STD: Tuple[float, float, float]  = (0.229, 0.224, 0.225)
 
+# Константи нормалізації OpenAI CLIP (StreetCLIP/GeoCLIP використовують CLIP
+# vision encoder, який очікує саме ці mean/std; HF CLIPModel НЕ нормалізує
+# сирий тензор сам — подача ImageNet-норми деградує фічі).
+CLIP_MEAN: Tuple[float, float, float] = (0.48145466, 0.45782750, 0.40821073)
+CLIP_STD: Tuple[float, float, float]  = (0.26862954, 0.26130258, 0.27577711)
+
+
+def get_norm_for(architecture: str) -> Tuple[
+    Tuple[float, float, float], Tuple[float, float, float]
+]:
+    """
+    Повертає (mean, std) нормалізації відповідно до архітектури.
+
+    baseline (EfficientNet-B2, ImageNet) → ImageNet stats;
+    streetclip / geoclip (CLIP backbone)  → CLIP stats.
+    """
+    if str(architecture).lower().strip() in ("streetclip", "geoclip",
+                                              "street_clip", "geo_clip"):
+        return CLIP_MEAN, CLIP_STD
+    return IMAGENET_MEAN, IMAGENET_STD
+
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Основні функції трансформацій

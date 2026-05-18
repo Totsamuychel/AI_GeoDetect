@@ -458,7 +458,19 @@ def get_device(prefer_cuda: bool = True) -> torch.device:
     if prefer_cuda and torch.cuda.is_available():
         device = torch.device("cuda")
         gpu_name = torch.cuda.get_device_name(0)
-        logger.info(f"Використовується GPU: {gpu_name}")
+        cap = torch.cuda.get_device_capability(0)
+        logger.info(
+            f"Використовується GPU: {gpu_name} "
+            f"(sm_{cap[0]}{cap[1]}, torch={torch.__version__}, "
+            f"cuda={torch.version.cuda})"
+        )
+        # Blackwell (RTX 50xx) = sm_120; вимагає torch>=2.7 + CUDA 12.8.
+        if cap[0] >= 12 and torch.version.cuda and torch.version.cuda < "12.8":
+            logger.warning(
+                "GPU Blackwell (sm_120+), але torch зібрано з CUDA "
+                f"{torch.version.cuda} (<12.8). Можливі збої CUDA-ядер — "
+                "використайте образ з PyTorch>=2.7 / CUDA 12.8 (cu128)."
+            )
     elif prefer_cuda and hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
         device = torch.device("mps")
         logger.info("Використовується Apple MPS")

@@ -4,11 +4,11 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "dataset/manifests/train.csv"
-image_root:         "dataset/raw/osv5m/images"
-countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
-quality_threshold:  0.4
-split_method:       "h3"
+manifest_path:      "dataset/manifests/train.csv"   # + сусідні val.csv/test.csv
+image_root:         "dataset"
+countries:          ["PL", "CZ", "HU"]
+quality_threshold:  0.0
+split_method:       "prebuilt"    # готові спліти (scripts/06_…); без витоку
 img_size:           224            # StreetCLIP / CLIP ViT очікує 224px
 
 # ── Архітектура ──────────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ stage2_unfreeze_n:  2                # кількість ViT encoder layers д�
 
 # ── Оптимізатор / регуляризація ──────────────────────────────────────────────
 weight_decay:       0.01
-batch_size:         32
-num_workers:        4
+batch_size:         64           # 5090 32GB: ViT-L/14 @224px, bf16
+num_workers:        8
 grad_clip:          1.0
 
 # ── Early stopping ───────────────────────────────────────────────────────────

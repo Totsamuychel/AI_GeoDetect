@@ -24,7 +24,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from augmentations import get_val_transforms
+from augmentations import get_val_transforms, get_norm_for
 from models import build_model
 from utils import get_device, load_config
 
@@ -97,11 +97,18 @@ class GeoLocator:
     ) -> None:
         self.device   = device or get_device()
         self.img_size = img_size
-        self.transform = get_val_transforms(img_size=img_size)
         self.city_coords = city_coords or UKRAINE_CITY_CENTERS.copy()
 
         self.model, self.class_names, self.config = self._load_model(checkpoint_path)
         self.num_classes = len(self.class_names)
+
+        # Нормалізація має збігатися з навчанням (CLIP-моделі ≠ ImageNet).
+        infer_mean, infer_std = get_norm_for(
+            self.config.get("architecture", "baseline")
+        )
+        self.transform = get_val_transforms(
+            img_size=img_size, mean=infer_mean, std=infer_std
+        )
 
         # Таблиця координат міст для передбачень
         self._class_centers = self._build_class_centers()

@@ -32,10 +32,10 @@ import torch
 import torch.nn as nn
 from torch.amp import GradScaler, autocast
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR, SequentialLR
 from torch.utils.data import DataLoader
 
-from augmentations import get_train_transforms, get_val_transforms
+from augmentations import get_train_transforms, get_val_transforms, get_norm_for
 from dataset import GeoDataset, create_dataloaders
 from metrics import top_k_accuracy_torch
 from models import build_model
@@ -58,9 +58,9 @@ class TrainConfig:
     """Конфігурація повного процесу навчання."""
 
     # Дані
-    manifest_path:     str   = "dataset/manifests/train.csv"
-    image_root:        str   = "dataset/raw/osv5m/images"
-    countries:         list  = field(default_factory=lambda: ["UA"])
+    manifest_path:     str   = "dataset/raw/mapillary/manifest.csv"
+    image_root:        str   = "dataset"
+    countries:         list  = field(default_factory=lambda: ["PL", "CZ", "HU"])
     quality_threshold: float = 0.4
     split_method:      str   = "h3"       # 'h3' або 'kmeans'
     h3_resolution:     int   = 4          # Рівень деталізації H3 (3-9)
@@ -85,6 +85,7 @@ class TrainConfig:
     batch_size:        int   = 32
     num_workers:       int   = 4
     grad_clip:         float = 1.0     # Максимальна норма градієнтів
+    contrastive_loss_weight: float = 0.1  # вага InfoNCE-лоса (лише GeoCLIP)
 
     # Early stopping
     patience:          int   = 7
@@ -383,6 +384,8 @@ def train_one_epoch(
     grad_clip: float = 1.0,
     use_amp: bool = True,
     architecture: str = "baseline",
+    amp_dtype: torch.dtype = torch.float16,
+    contrastive_weight: float = 0.1,
 ) -> dict[str, float]:
     """
     Навчання моделі протягом однієї епохи.
@@ -418,17 +421,23 @@ def train_one_epoch(
 
         optimizer.zero_grad(set_to_none=True)
 
-        with autocast(device_type="cuda", enabled=use_amp):
+        with autocast(device_type=device.type, dtype=amp_dtype, enabled=use_amp):
             if architecture == "geoclip" and coords is not None:
                 output = model(images, coords=coords)
                 logits = output["logits"]
                 cls_loss = criterion(logits, labels)
                 # Комбінований loss: класифікація + контрастивний
                 contrastive = output.get("contrastive_loss", torch.tensor(0.0, device=device))
-                loss = cls_loss + 0.1 * contrastive
+                loss = cls_loss + contrastive_weight * contrastive
             else:
                 logits = model(images)
                 loss = criterion(logits, labels)
+
+        if not torch.isfinite(loss):
+            raise RuntimeError(
+                f"Non-finite loss ({loss.item()}) на батчі {batch_idx}. "
+                f"Зупинка для діагностики (lr/AMP/дані)."
+            )
 
         scaler.scale(loss).backward()
         scaler.unscale_(optimizer)
@@ -463,6 +472,8 @@ def validate(
     device: torch.device,
     use_amp: bool = True,
     architecture: str = "baseline",
+    amp_dtype: torch.dtype = torch.float16,
+    contrastive_weight: float = 0.1,
 ) -> dict[str, float]:
     """
     Валідація моделі на валідаційному або тестовому наборі.
@@ -483,17 +494,24 @@ def validate(
     all_logits = []
     all_labels = []
 
-    for images, labels, _coords in loader:
+    for images, labels, coords in loader:
         images = images.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
 
-        with autocast(device_type="cuda", enabled=use_amp):
+        with autocast(device_type=device.type, dtype=amp_dtype, enabled=use_amp):
             if architecture == "geoclip":
-                output = model(images)
+                # Той самий складений loss, що і в train — інакше val_loss
+                # та early stopping несумісні між стадіями.
+                coords = coords.to(device, non_blocking=True).float()
+                output = model(images, coords=coords)
                 logits = output["logits"]
+                contrastive = output.get(
+                    "contrastive_loss", torch.tensor(0.0, device=device)
+                )
+                loss = criterion(logits, labels) + contrastive_weight * contrastive
             else:
                 logits = model(images)
-            loss = criterion(logits, labels)
+                loss = criterion(logits, labels)
 
         total_loss += loss.item() * images.size(0)
         all_logits.append(logits.cpu())
@@ -517,6 +535,16 @@ def validate(
 # Повний цикл навчання
 # ──────────────────────────────────────────────────────────────────────────────
 
+def build_warmup_cosine(optimizer, n_epochs: int, eta_min: float):
+    """LinearLR-warmup (≈10% епох) → CosineAnnealingLR. Крок раз на епоху."""
+    warmup = max(1, int(round(n_epochs * 0.1)))
+    if n_epochs <= 1 or warmup >= n_epochs:
+        return CosineAnnealingLR(optimizer, T_max=max(1, n_epochs), eta_min=eta_min)
+    w = LinearLR(optimizer, start_factor=0.1, total_iters=warmup)
+    c = CosineAnnealingLR(optimizer, T_max=n_epochs - warmup, eta_min=eta_min)
+    return SequentialLR(optimizer, [w, c], milestones=[warmup])
+
+
 def train(config: TrainConfig) -> nn.Module:
     """
     Повний цикл навчання двоетапного тренування моделі.
@@ -535,10 +563,12 @@ def train(config: TrainConfig) -> nn.Module:
 
     # ── Дані ─────────────────────────────────────────────────────────────────
     logger.info("Завантаження датасету...")
+    norm_mean, norm_std = get_norm_for(config.architecture)
+    logger.info(f"Нормалізація для {config.architecture}: mean={norm_mean[0]:.3f}…")
     dataloaders = create_dataloaders(
         manifest_path=config.manifest_path,
-        train_transform=get_train_transforms(config.img_size),
-        val_transform=get_val_transforms(config.img_size),
+        train_transform=get_train_transforms(config.img_size, mean=norm_mean, std=norm_std),
+        val_transform=get_val_transforms(config.img_size, mean=norm_mean, std=norm_std),
         countries=config.countries if config.countries else None,
         quality_threshold=config.quality_threshold,
         image_root=config.image_root if config.image_root else None,
@@ -582,7 +612,18 @@ def train(config: TrainConfig) -> nn.Module:
     else:
         criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    scaler    = GradScaler(enabled=config.mixed_precision and torch.cuda.is_available())
+    use_cuda  = device.type == "cuda"
+    use_amp   = config.mixed_precision and use_cuda
+    # Blackwell: bf16 стабільніший і не потребує GradScaler; fp16 — як фоллбек.
+    amp_dtype = (torch.bfloat16 if use_cuda and torch.cuda.is_bf16_supported()
+                 else torch.float16)
+    scaler    = GradScaler(enabled=use_amp and amp_dtype == torch.float16)
+    if use_amp:
+        logger.info(
+            f"AMP: dtype={amp_dtype}, "
+            f"GradScaler={'on' if scaler.is_enabled() else 'off'}"
+        )
+    cw = config.contrastive_loss_weight
     exp_logger = Logger(config)
     ckpt_manager = CheckpointManager(config.checkpoint_dir, save_top_k=config.save_top_k)
     early_stop   = EarlyStopping(patience=config.patience, min_delta=config.min_delta)
@@ -601,10 +642,8 @@ def train(config: TrainConfig) -> nn.Module:
             lr=config.stage1_lr,
             weight_decay=config.weight_decay,
         )
-        scheduler = CosineAnnealingLR(
-            optimizer,
-            T_max=config.stage1_epochs,
-            eta_min=config.stage1_lr * 0.01,
+        scheduler = build_warmup_cosine(
+            optimizer, config.stage1_epochs, config.stage1_lr * 0.01
         )
 
         for epoch in range(1, config.stage1_epochs + 1):
@@ -613,16 +652,20 @@ def train(config: TrainConfig) -> nn.Module:
             train_metrics = train_one_epoch(
                 model, train_loader, optimizer, criterion,
                 device, scaler, config.grad_clip,
-                config.mixed_precision, config.architecture,
+                use_amp, config.architecture, amp_dtype, cw,
             )
             val_metrics = validate(
                 model, val_loader, criterion,
-                device, config.mixed_precision, config.architecture,
+                device, use_amp, config.architecture, amp_dtype, cw,
             )
             scheduler.step()
 
             elapsed = time.time() - t0
             current_lr = optimizer.param_groups[0]["lr"]
+            gpu_gb = 0.0
+            if use_cuda:
+                gpu_gb = torch.cuda.max_memory_allocated() / 1e9
+                torch.cuda.reset_peak_memory_stats()
 
             logger.info(
                 f"Епоха [{epoch:3d}/{config.stage1_epochs}] "
@@ -631,7 +674,7 @@ def train(config: TrainConfig) -> nn.Module:
                 f"val_loss={val_metrics['loss']:.4f} "
                 f"val_top1={val_metrics['top1_acc']:.4f} "
                 f"val_top5={val_metrics['top5_acc']:.4f} | "
-                f"lr={current_lr:.2e} | {elapsed:.1f}s"
+                f"lr={current_lr:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
             )
 
             global_step += 1
@@ -642,6 +685,7 @@ def train(config: TrainConfig) -> nn.Module:
                 "val/top1_acc":   val_metrics["top1_acc"],
                 "val/top5_acc":   val_metrics["top5_acc"],
                 "lr":             current_lr,
+                "gpu_gb":         gpu_gb,
                 "stage":          1,
             }, step=global_step)
 
@@ -693,10 +737,8 @@ def train(config: TrainConfig) -> nn.Module:
         ]
 
         optimizer = AdamW(param_groups, weight_decay=config.weight_decay)
-        scheduler = CosineAnnealingLR(
-            optimizer,
-            T_max=config.stage2_epochs,
-            eta_min=config.stage2_lr * 0.001,
+        scheduler = build_warmup_cosine(
+            optimizer, config.stage2_epochs, config.stage2_lr * 0.001
         )
 
         for epoch in range(1, config.stage2_epochs + 1):
@@ -705,16 +747,20 @@ def train(config: TrainConfig) -> nn.Module:
             train_metrics = train_one_epoch(
                 model, train_loader, optimizer, criterion,
                 device, scaler, config.grad_clip,
-                config.mixed_precision, config.architecture,
+                use_amp, config.architecture, amp_dtype, cw,
             )
             val_metrics = validate(
                 model, val_loader, criterion,
-                device, config.mixed_precision, config.architecture,
+                device, use_amp, config.architecture, amp_dtype, cw,
             )
             scheduler.step()
 
             elapsed = time.time() - t0
             current_lr = optimizer.param_groups[0]["lr"]
+            gpu_gb = 0.0
+            if use_cuda:
+                gpu_gb = torch.cuda.max_memory_allocated() / 1e9
+                torch.cuda.reset_peak_memory_stats()
 
             logger.info(
                 f"Епоха [{epoch:3d}/{config.stage2_epochs}] "
@@ -723,7 +769,7 @@ def train(config: TrainConfig) -> nn.Module:
                 f"val_loss={val_metrics['loss']:.4f} "
                 f"val_top1={val_metrics['top1_acc']:.4f} "
                 f"val_top5={val_metrics['top5_acc']:.4f} | "
-                f"lr={current_lr:.2e} | {elapsed:.1f}s"
+                f"lr={current_lr:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
             )
 
             global_step += 1
@@ -734,6 +780,7 @@ def train(config: TrainConfig) -> nn.Module:
                 "val/top1_acc":   val_metrics["top1_acc"],
                 "val/top5_acc":   val_metrics["top5_acc"],
                 "lr":             current_lr,
+                "gpu_gb":         gpu_gb,
                 "stage":          2,
             }, step=global_step)
 

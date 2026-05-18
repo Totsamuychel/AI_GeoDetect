@@ -30,7 +30,7 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
-from augmentations import get_val_transforms
+from augmentations import get_val_transforms, get_norm_for
 from dataset import GeoDataset
 from metrics import (
     compute_all_metrics,
@@ -157,7 +157,7 @@ def evaluate(
     output_path: Optional[str] = None,
     use_test_split: bool = True,
     img_size: int = 224,
-    split_method: str = "h3",
+    split_method: str = "prebuilt",
     seed: int = 42,
 ) -> EvalResult:
     """
@@ -188,7 +188,8 @@ def evaluate(
     num_classes  = len(class_names)
 
     # ── Датасет ───────────────────────────────────────────────────────────────
-    val_transform = get_val_transforms(img_size=img_size)
+    eval_mean, eval_std = get_norm_for(architecture)
+    val_transform = get_val_transforms(img_size=img_size, mean=eval_mean, std=eval_std)
 
     full_dataset = GeoDataset(
         manifest_path=manifest_path,
@@ -202,13 +203,14 @@ def evaluate(
     full_dataset._city_to_idx = {c: i for i, c in enumerate(class_names)}
     full_dataset.num_classes  = num_classes
 
-    if use_test_split:
+    if split_method == "prebuilt" or not use_test_split:
+        # Маніфест уже є цільовим (test) сплітом — оцінюємо як є.
+        test_idx = full_dataset.df.index
+    else:
         _, _, test_idx = full_dataset.get_split_indices(
             method=split_method,
             seed=seed,
         )
-    else:
-        test_idx = full_dataset.df.index
 
     test_dataset = GeoDataset(
         manifest_path=manifest_path,
@@ -221,6 +223,26 @@ def evaluate(
     test_dataset.class_names  = class_names
     test_dataset._city_to_idx = {c: i for i, c in enumerate(class_names)}
     test_dataset.num_classes  = num_classes
+
+    # Центри міст для Haversine/GeoScore — рахуємо на TRAIN-сплиті, інакше
+    # витік тест-даних у метрику відстані.
+    train_manifest = Path(manifest_path).parent / "train.csv"
+    if train_manifest.exists():
+        train_df = GeoDataset(
+            manifest_path=str(train_manifest),
+            transform=None,
+            countries=countries,
+            quality_threshold=quality_threshold,
+            image_root=image_root,
+        ).df
+        city_centers = _city_centers_from_df(train_df, class_names)
+        logger.info(f"Центри міст обчислено з {train_manifest.name} (без витоку)")
+    else:
+        city_centers = _city_centers_from_df(test_dataset.df, class_names)
+        logger.warning(
+            f"{train_manifest} не знайдено — центри міст з тест-набору "
+            f"(можливий витік у метрику відстані)"
+        )
 
     test_loader = DataLoader(
         test_dataset,
@@ -251,7 +273,7 @@ def evaluate(
 
             # Передбачені координати = центр передбаченого міста
             pred_indices = logits.argmax(dim=1).cpu().numpy()
-            pred_coords  = _indices_to_coords(pred_indices, class_names, test_dataset)
+            pred_coords  = _indices_to_coords(pred_indices, class_names, city_centers)
             # coords — тензор форми (N, 2) у форматі [lat, lon]
             true_coords = coords.cpu().numpy().astype(np.float64)
 
@@ -354,38 +376,37 @@ def evaluate(
 # Допоміжні функції
 # ──────────────────────────────────────────────────────────────────────────────
 
+def _city_centers_from_df(
+    df: "pd.DataFrame", class_names: list[str]
+) -> dict[str, tuple[float, float]]:
+    """Середні (lat, lon) для кожного міста. Має рахуватись на TRAIN, не на test."""
+    centers: dict[str, tuple[float, float]] = {}
+    has_city = "city" in df.columns
+    for city in class_names:
+        sub = df[df["city"] == city] if has_city else df.iloc[0:0]
+        centers[city] = (
+            (float(sub["lat"].mean()), float(sub["lon"].mean()))
+            if len(sub) > 0 else (0.0, 0.0)
+        )
+    return centers
+
+
 def _indices_to_coords(
     indices: np.ndarray,
     class_names: list[str],
-    dataset: GeoDataset,
+    city_centers: dict[str, tuple[float, float]],
 ) -> np.ndarray:
     """
     Конвертує індекси класів у середні координати відповідних міст.
 
     Аргументи:
-        indices:     Масив індексів класів (N,).
-        class_names: Список назв класів.
-        dataset:     GeoDataset для обчислення середніх координат.
+        indices:      Масив індексів класів (N,).
+        class_names:  Список назв класів.
+        city_centers: Передобчислені центри міст (з TRAIN-сплиту, без витоку).
 
     Повертає:
         Масив координат (N, 2) у форматі (lat, lon).
     """
-    # Передобчислюємо середні координати для кожного міста
-    city_centers: dict[str, tuple[float, float]] = {}
-    if "city" in dataset.df.columns:
-        for city in class_names:
-            city_df = dataset.df[dataset.df["city"] == city]
-            if len(city_df) > 0:
-                city_centers[city] = (
-                    float(city_df["lat"].mean()),
-                    float(city_df["lon"].mean()),
-                )
-            else:
-                city_centers[city] = (0.0, 0.0)
-    else:
-        for city in class_names:
-            city_centers[city] = (0.0, 0.0)
-
     coords = []
     for idx in indices:
         if idx < len(class_names):
@@ -463,8 +484,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size",    type=int, default=32)
     parser.add_argument("--num-workers",   type=int, default=4)
     parser.add_argument("--img-size",      type=int, default=224)
-    parser.add_argument("--split-method",  type=str, default="h3",
-                        choices=["h3", "kmeans"])
+    parser.add_argument("--split-method",  type=str, default="prebuilt",
+                        choices=["prebuilt", "h3", "kmeans"],
+                        help="prebuilt = маніфест уже є test-сплитом")
     parser.add_argument("--countries",     type=str, nargs="+", default=None,
                         help="Коди країн для фільтрації (наприклад: UA)")
     parser.add_argument("--quality",       type=float, default=0.0,

@@ -4,11 +4,11 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "dataset/manifests/train.csv"
-image_root:         "dataset/raw/osv5m/images"
-countries:          ["UA", "PL", "CZ", "HU", "AT", "RO", "SK"]
-quality_threshold:  0.4
-split_method:       "h3"
+manifest_path:      "dataset/manifests/train.csv"   # + сусідні val.csv/test.csv
+image_root:         "dataset"
+countries:          ["PL", "CZ", "HU"]
+quality_threshold:  0.0
+split_method:       "prebuilt"    # готові спліти (scripts/06_…); без витоку
 img_size:           224            # CLIP ViT очікує 224px
 
 # ── Архітектура ──────────────────────────────────────────────────────────────
@@ -27,8 +27,8 @@ stage2_unfreeze_n:  4                # кількість transformer блокі
 
 # ── Оптимізатор / регуляризація ──────────────────────────────────────────────
 weight_decay:       0.01
-batch_size:         32               # контрастивний loss виграє від більшого батчу
-num_workers:        4
+batch_size:         128              # InfoNCE: більше негативів = краще (5090 32GB)
+num_workers:        8
 grad_clip:          1.0
 
 # ── Early stopping ───────────────────────────────────────────────────────────

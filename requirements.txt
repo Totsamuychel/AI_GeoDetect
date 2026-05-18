@@ -1,16 +1,16 @@
 # =============================================================================
-# requirements.txt — pip equivalent of environment.yml
-# Install with:  pip install -r requirements.txt
+# requirements.txt — non-torch dependencies. Install with:
+#   pip install -r requirements.txt
 #
-# NOTE: PyTorch with CUDA 11.8 must be installed separately:
-#   pip install torch==2.1.* torchvision==0.16.* torchaudio==2.1.* \
-#       --index-url https://download.pytorch.org/whl/cu118
+# PyTorch is intentionally NOT pinned here.
+#
+#   RunPod / RTX 5090 (Blackwell, sm_120): use a base image that already ships
+#   PyTorch >= 2.7 with CUDA 12.8 (cu128). Do NOT pip-install torch — the image
+#   provides it. torch 2.1 + cu118 will fail immediately on Blackwell.
+#
+#   Local CPU/dev (optional): pip install torch torchvision
+#       --index-url https://download.pytorch.org/whl/cpu
 # =============================================================================
-
-# ── PyTorch (install via URL above; listed here for reference) ─────────────
-# torch==2.1.*
-# torchvision==0.16.*
-# torchaudio==2.1.*
 
 # ── Core scientific stack ───────────────────────────────────────────────────
 numpy>=1.24,<2.0
