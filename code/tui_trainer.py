@@ -96,25 +96,102 @@ def _save_tui_config(arch: str, config: TrainConfig) -> None:
 # ─── Головне меню ─────────────────────────────────────────────────────────────
 
 def _show_main_menu() -> str:
+    import sys as _sys
     console.clear()
-    header = Text("🌍  AI GeoDetect — Training Manager", style="bold cyan", justify="center")
-    console.print(Panel(header, box=box.DOUBLE, expand=False))
 
-    t = Table(box=box.ROUNDED, show_header=False, padding=(0, 2), expand=False)
-    t.add_column("key", style="bold yellow", width=5, no_wrap=True)
-    t.add_column("desc")
-    t.add_row("[1]", "Train  [bold]Baseline[/bold]   (EfficientNet-B2)")
-    t.add_row("[2]", "Train  [bold]StreetCLIP[/bold] (Transfer Learning)")
-    t.add_row("[3]", "Train  [bold]GeoCLIP[/bold]    (Contrastive + GPS)")
-    t.add_row("[4]", "Train  [bold]ALL THREE[/bold]  (послідовно)")
-    t.add_row("", "")
-    t.add_row("[5]", "🔧 Configure settings")
-    t.add_row("[6]", "💾 View checkpoints")
-    t.add_row("[7]", "📊 Evaluate model")
-    t.add_row("", "")
-    t.add_row("[q]", "Quit")
-    console.print(t)
-    return console.input("[bold]> [/bold]").strip().lower()
+    ASCII_LOGO = (
+        "    ____  __________  __  __________  __________",
+        "   / ___\\/ ____/ __ \\/ / / / ____/ / / /_  __/  ",
+        "  / (_ // __/ / / / / /_/ / /   / /_/ / / /     ",
+        "  \\___// /___/ /_/ / __  / /___/ __  / / /      ",
+        "      /_____/\\____/_/ /_/\\____/_/ /_/ /_/       ",
+        "                                                  ",
+        "       [ Street-Level  GeoLocation  AI ]         ",
+    )
+
+    # ── footer info ───────────────────────────────────────────────────────────
+    py_ver = f"Python {_sys.version_info.major}.{_sys.version_info.minor}"
+    torch_ver = f"PyTorch {torch.__version__.split('+')[0]}"
+    if torch.cuda.is_available():
+        gpu_name = torch.cuda.get_device_name(0)
+        gpu_str  = f"GPU: {gpu_name}"
+    else:
+        gpu_str = "CPU  (no CUDA)"
+
+    sep = "[orange1]" + "━" * 42 + "[/orange1]"
+
+    lines: list[str] = []
+
+    # logo
+    for row in ASCII_LOGO:
+        lines.append(f"[bold orange1]{row}[/bold orange1]")
+
+    lines.append("")
+    lines.append(f"[bold orange1 on black]{'AI GeoDetect — Training Manager':^50}[/bold orange1 on black]")
+    lines.append("")
+
+    # ── TRAIN section ─────────────────────────────────────────────────────────
+    lines.append(f"[orange1]  ━━━━━  TRAIN  {'━' * 29}[/orange1]")
+    lines.append("")
+    lines.append(
+        "  [orange1]▶[/orange1]  [bold orange1][1][/bold orange1]"
+        "  [bright_white]Baseline[/bright_white]"
+        "    [white]EfficientNet-B2[/white]"
+    )
+    lines.append(
+        "  [orange1]▶[/orange1]  [bold orange1][2][/bold orange1]"
+        "  [bright_white]StreetCLIP[/bright_white]"
+        "  [white]ViT-L/14  Transfer Learning[/white]"
+    )
+    lines.append(
+        "  [orange1]▶[/orange1]  [bold orange1][3][/bold orange1]"
+        "  [bright_white]GeoCLIP[/bright_white]"
+        "     [white]Contrastive + GPS Encoder[/white]"
+    )
+    lines.append(
+        "  [orange1]▶[/orange1]  [bold orange1][4][/bold orange1]"
+        "  [bright_white]ALL THREE[/bright_white]"
+        "   [white]Train all models sequentially[/white]"
+    )
+    lines.append("")
+
+    # ── TOOLS section ─────────────────────────────────────────────────────────
+    lines.append(f"[orange1]  ━━━━━  TOOLS  {'━' * 29}[/orange1]")
+    lines.append("")
+    lines.append(
+        "  ⚙  [bold orange1][5][/bold orange1]"
+        "  [bright_white]Configure[/bright_white]  [white]Edit training settings[/white]"
+    )
+    lines.append(
+        "  💾  [bold orange1][6][/bold orange1]"
+        "  [bright_white]Checkpoints[/bright_white]  [white]Browse saved models[/white]"
+    )
+    lines.append(
+        "  📊  [bold orange1][7][/bold orange1]"
+        "  [bright_white]Evaluate[/bright_white]   [white]Run evaluation on test set[/white]"
+    )
+    lines.append("")
+
+    # ── quit ─────────────────────────────────────────────────────────────────
+    lines.append(f"[orange1]  {'─' * 42}[/orange1]")
+    lines.append("  [bold red][q][/bold red]  [white]Quit[/white]")
+    lines.append("")
+
+    # ── footer ────────────────────────────────────────────────────────────────
+    lines.append(f"  [dim orange1]{gpu_str}[/dim orange1]")
+    lines.append(f"  [dim]{py_ver}  │  {torch_ver}[/dim]")
+
+    body = "\n".join(lines)
+    console.print(
+        Panel(
+            Text.from_markup(body),
+            box=box.HEAVY,
+            border_style="orange1",
+            expand=False,
+            padding=(0, 1),
+        )
+    )
+    return console.input("[bold orange1]  ›[/bold orange1] ").strip().lower()
 
 # ─── Таблиця параметрів ────────────────────────────────────────────────────────
 
