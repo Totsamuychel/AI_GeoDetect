@@ -119,13 +119,18 @@ class GeoLocator:
     def _build_class_centers(self) -> dict[str, tuple[float, float]]:
         """Будує словник координат центрів для класів моделі."""
         centers: dict[str, tuple[float, float]] = {}
+        unknown = []
         for city in self.class_names:
             if city in self.city_coords:
                 centers[city] = self.city_coords[city]
             else:
-                # Координати невідомого міста — центр України
-                logger.warning(f"Координати міста не знайдено: '{city}'. Використовуємо (49.0, 32.0)")
+                unknown.append(city)
                 centers[city] = (49.0, 32.0)
+        if unknown:
+            logger.warning(
+                f"Координати не знайдено для {len(unknown)} міст: {unknown}. "
+                f"Використовуємо центр України (49.0, 32.0)."
+            )
         return centers
 
     def load_image(self, image_path: Union[str, Path]) -> torch.Tensor:
@@ -207,10 +212,12 @@ class GeoLocator:
 
         return predictions
 
+    @torch.no_grad()
     def predict_batch(
         self,
         image_paths: list[Union[str, Path]],
         top_k: int = 1,
+        batch_size: int = 32,
     ) -> list[list[dict]]:
         """
         Пакетне передбачення для кількох зображень.
@@ -218,19 +225,48 @@ class GeoLocator:
         Аргументи:
             image_paths: Список шляхів до зображень.
             top_k:       Кількість топ-передбачень для кожного.
+            batch_size:  Розмір батчу для GPU-інференсу.
 
         Повертає:
-            Список результатів для кожного зображення.
+            Список результатів для кожного зображення (в тому ж порядку).
         """
-        results = []
-        for path in image_paths:
+        all_results: list[list[dict]] = [[] for _ in image_paths]
+        tensors = []
+        valid_indices = []
+
+        for i, path in enumerate(image_paths):
             try:
-                preds = self.predict(path, top_k=top_k)
-                results.append(preds)
+                tensors.append(self.load_image(path))
+                valid_indices.append(i)
             except Exception as e:
-                logger.error(f"Помилка інференсу для {path}: {e}")
-                results.append([])
-        return results
+                logger.error(f"Помилка завантаження {path}: {e}")
+
+        if not tensors:
+            return all_results
+
+        architecture = self.config.get("architecture", "baseline")
+        for chunk_start in range(0, len(tensors), batch_size):
+            batch = torch.cat(tensors[chunk_start:chunk_start + batch_size], dim=0)
+            if architecture == "geoclip":
+                logits = self.model(batch)["logits"]
+            else:
+                logits = self.model(batch)
+            probs = F.softmax(logits, dim=1)
+            for j, prob_vec in enumerate(probs):
+                top_probs, top_idx = prob_vec.topk(min(top_k, self.num_classes))
+                preds = []
+                for rank, (prob, idx) in enumerate(
+                    zip(top_probs.tolist(), top_idx.tolist()), start=1
+                ):
+                    city = self.class_names[idx]
+                    lat, lon = self._class_centers.get(city, (49.0, 32.0))
+                    preds.append({
+                        "rank": rank, "city": city,
+                        "prob": round(prob, 6), "lat": lat, "lon": lon,
+                    })
+                all_results[valid_indices[chunk_start + j]] = preds
+
+        return all_results
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -353,7 +389,7 @@ def generate_folium_map(
     legend_html = """
     <div style="position: fixed; bottom: 30px; left: 30px; z-index: 1000;
                 background: white; padding: 10px; border-radius: 5px;
-                border: 1px solid #ccc; font-family: Arial, font-size: 12px;">
+                border: 1px solid #ccc; font-family: Arial; font-size: 12px;">
         <b>Легенда</b><br/>
         <span style="color:green">●</span> #1 передбачення<br/>
         <span style="color:darkgreen">●</span> #2 передбачення<br/>

@@ -237,7 +237,8 @@ def top_k_accuracy_torch(
         Скалярний torch.Tensor з точністю від 0.0 до 1.0.
     """
     with torch.no_grad():
-        _, top_k_preds = logits.topk(k, dim=1, largest=True, sorted=False)  # (N, k)
+        effective_k = min(k, logits.size(1))
+        _, top_k_preds = logits.topk(effective_k, dim=1, largest=True, sorted=False)  # (N, k)
         labels_expanded = labels.view(-1, 1).expand_as(top_k_preds)          # (N, k)
         correct = top_k_preds.eq(labels_expanded).any(dim=1).float()
         return correct.mean()

@@ -58,7 +58,9 @@ def _split_by_h3(
     try:
         import h3
     except ImportError:
-        logger.warning("h3 не встановлено, використовується k-means розбиття")
+        logger.warning(
+            "h3-py не встановлено (pip install h3), використовується k-means розбиття"
+        )
         return _split_by_kmeans(df, train_frac=train_frac, val_frac=val_frac, seed=seed)
 
     # API h3 >= 4.0 використовує latlng_to_cell(); старий h3 < 4.0 має geo_to_h3().
@@ -391,6 +393,8 @@ class GeoDataset(Dataset):
         city_idx = self._city_to_idx.get(city, 0)
         lat = float(row["lat"])
         lon = float(row["lon"])
+        if np.isnan(lat) or np.isnan(lon):
+            raise ValueError(f"NaN координати для рядка index={idx}: lat={lat}, lon={lon}")
         coords = torch.tensor([lat, lon], dtype=torch.float32)
 
         return img_tensor, city_idx, coords

@@ -22,7 +22,6 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import argparse
 import json
 import logging
-import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -247,7 +246,10 @@ class CheckpointManager:
             "config":      asdict(config),
             "class_names": class_names,
         }
-        torch.save(checkpoint, path)
+        import shutil
+        tmp_path = path.with_suffix(".tmp")
+        torch.save(checkpoint, tmp_path)
+        shutil.move(str(tmp_path), str(path))
 
         value = val_loss if self.mode == "min" else val_acc
         self._checkpoints.append((value, path))
@@ -698,7 +700,8 @@ def train(config: TrainConfig) -> nn.Module:
             scheduler.step()
 
             elapsed = time.time() - t0
-            current_lr = optimizer.param_groups[0]["lr"]
+            lr_head     = optimizer.param_groups[0]["lr"]
+            lr_backbone = optimizer.param_groups[1]["lr"] if len(optimizer.param_groups) > 1 else 0.0
             gpu_gb = 0.0
             if use_cuda:
                 gpu_gb = torch.cuda.max_memory_allocated() / 1e9
@@ -712,20 +715,21 @@ def train(config: TrainConfig) -> nn.Module:
                 f"val_top1={val_metrics['top1_acc']:.4f} "
                 f"val_f1={val_metrics['macro_f1']:.4f} "
                 f"val_bacc={val_metrics['balanced_acc']:.4f} | "
-                f"lr={current_lr:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
+                f"lr_head={lr_head:.2e} lr_bb={lr_backbone:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
             )
 
             global_step += 1
             exp_logger.log({
-                "train/loss":     train_metrics["loss"],
-                "train/acc":      train_metrics["acc"],
-                "val/loss":       val_metrics["loss"],
-                "val/top1_acc":   val_metrics["top1_acc"],
-                "val/macro_f1":   val_metrics["macro_f1"],
+                "train/loss":       train_metrics["loss"],
+                "train/acc":        train_metrics["acc"],
+                "val/loss":         val_metrics["loss"],
+                "val/top1_acc":     val_metrics["top1_acc"],
+                "val/macro_f1":     val_metrics["macro_f1"],
                 "val/balanced_acc": val_metrics["balanced_acc"],
-                "lr":             current_lr,
-                "gpu_gb":         gpu_gb,
-                "stage":          1,
+                "lr/head":          lr_head,
+                "lr/backbone":      lr_backbone,
+                "gpu_gb":           gpu_gb,
+                "stage":            1,
             }, step=global_step)
 
             ckpt_manager.save(
@@ -743,7 +747,7 @@ def train(config: TrainConfig) -> nn.Module:
                     "val_loss": val_metrics["loss"], "val_top1": val_metrics["top1_acc"],
                     "val_macro_f1": val_metrics["macro_f1"], "val_bal_acc": val_metrics["balanced_acc"],
                     "best_val_loss": early_stop.best_value, "early_stop_counter": early_stop.counter,
-                    "lr_head": current_lr, "lr_backbone": None, "elapsed_sec": elapsed,
+                    "lr_head": lr_head, "lr_backbone": lr_backbone, "elapsed_sec": elapsed,
                 })
             if _stop:
                 logger.info("Early stopping спрацював на Стадії 1")

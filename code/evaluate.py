@@ -74,7 +74,7 @@ def load_checkpoint(
     if not path.exists():
         raise FileNotFoundError(f"Чекпоінт не знайдено: {path}")
 
-    checkpoint = torch.load(str(path), map_location=device, weights_only=False)
+    checkpoint = torch.load(str(path), map_location=device, weights_only=True)
     config     = checkpoint.get("config", {})
     class_names = checkpoint.get("class_names", [])
     num_classes = len(class_names)
@@ -208,7 +208,7 @@ def evaluate(
 
     if split_method == "prebuilt" or not use_test_split:
         # Маніфест уже є цільовим (test) сплітом — оцінюємо як є.
-        test_idx = full_dataset.df.index
+        test_idx = list(range(len(full_dataset)))
     else:
         _, _, test_idx = full_dataset.get_split_indices(
             method=split_method,
@@ -253,6 +253,7 @@ def evaluate(
         shuffle=False,
         num_workers=num_workers,
         pin_memory=torch.cuda.is_available(),
+        persistent_workers=(num_workers > 0),
     )
 
     logger.info(f"Тестовий набір: {len(test_dataset)} зразків, {num_classes} класів")
@@ -392,7 +393,7 @@ def _city_centers_from_df(
         sub = df[df["city"] == city] if has_city else df.iloc[0:0]
         centers[city] = (
             (float(sub["lat"].mean()), float(sub["lon"].mean()))
-            if len(sub) > 0 else (0.0, 0.0)
+            if len(sub) > 0 else (49.0, 32.0)
         )
     return centers
 
@@ -417,9 +418,9 @@ def _indices_to_coords(
     for idx in indices:
         if idx < len(class_names):
             city = class_names[idx]
-            coords.append(city_centers.get(city, (0.0, 0.0)))
+            coords.append(city_centers.get(city, (49.0, 32.0)))
         else:
-            coords.append((0.0, 0.0))
+            coords.append((49.0, 32.0))
 
     return np.array(coords, dtype=np.float64)
 
