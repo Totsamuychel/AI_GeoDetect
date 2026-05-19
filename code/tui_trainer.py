@@ -87,7 +87,10 @@ def _save_tui_config(arch: str, config: TrainConfig) -> None:
     saved: dict = {}
     if CONFIG_PATH.exists():
         saved = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    saved[arch] = {f: getattr(config, f) for f, *_ in EDITABLE_FIELDS}
+    arch_saved = saved.get(arch, {})
+    for f, *_ in EDITABLE_FIELDS:
+        arch_saved[f] = getattr(config, f)
+    saved[arch] = arch_saved
     CONFIG_PATH.write_text(json.dumps(saved, indent=2, ensure_ascii=False), encoding="utf-8")
 
 # ─── Головне меню ─────────────────────────────────────────────────────────────
@@ -346,6 +349,11 @@ def _run_training_live(arch: str, config: TrainConfig, transient: bool = True) -
         train_thread.join(timeout=60)
         if train_thread.is_alive():
             console.print("[bold red]⚠ Потік навчання не завершився за 60с (daemon, буде вбито при виході)[/bold red]")
+        # Drain queues so history and final status are not lost after Ctrl+C.
+        while not cb_queue.empty():
+            _apply_info(state, cb_queue.get_nowait(), history)
+        while not result_queue.empty():
+            _apply_info(state, result_queue.get_nowait(), history)
 
     if state.get("status") == "running":
         state["status"] = "done"
