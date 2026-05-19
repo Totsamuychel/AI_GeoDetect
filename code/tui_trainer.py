@@ -280,7 +280,8 @@ def _apply_info(state: dict, info: dict, history: list[dict]) -> None:
             state["error"] = info.get("error", "")
 
 
-def _run_training_live(arch: str, config: TrainConfig) -> list[dict]:
+def _run_training_live(arch: str, config: TrainConfig, transient: bool = True) -> list[dict]:
+    _transient = transient
     cb_queue:     queue.Queue = queue.Queue()
     result_queue: queue.Queue = queue.Queue()
     stop_event = threading.Event()
@@ -311,7 +312,7 @@ def _run_training_live(arch: str, config: TrainConfig) -> list[dict]:
     train_thread.start()
 
     try:
-        with Live(console=console, refresh_per_second=5, transient=True) as live:
+        with Live(console=console, refresh_per_second=5, transient=_transient) as live:
             while train_thread.is_alive() or not cb_queue.empty():
                 while not cb_queue.empty():
                     _apply_info(state, cb_queue.get_nowait(), history)
@@ -319,11 +320,16 @@ def _run_training_live(arch: str, config: TrainConfig) -> list[dict]:
                     _apply_info(state, result_queue.get_nowait(), history)
 
                 state["elapsed_sec"] = time.time() - start_time
-                ep  = state.get("epoch", 0)
-                tot = state.get("total_epochs", 1)
-                if ep > 0:
-                    spe = state["elapsed_sec"] / ep
-                    state["eta_sec"] = spe * max(0, tot - ep)
+                ep            = state.get("epoch", 0)
+                tot           = state.get("total_epochs", 1)
+                batch         = state.get("batch", 0)
+                total_batches = state.get("total_batches", 1)
+                # Fractional completed epochs: (ep-1) full + current batch progress.
+                # Avoids overestimating speed when ep=1 and only seconds have passed.
+                completed = (ep - 1) + batch / max(total_batches, 1)
+                if completed > 0 and state["elapsed_sec"] > 0:
+                    spe = state["elapsed_sec"] / completed
+                    state["eta_sec"] = spe * max(0, tot - completed)
 
                 live.update(_build_live_panel(state, arch))
                 time.sleep(0.12)
@@ -338,6 +344,8 @@ def _run_training_live(arch: str, config: TrainConfig) -> list[dict]:
         state["status"] = "stopped"
         console.print("\n[bold yellow]⏹ Очікування завершення поточного батчу...[/bold yellow]")
         train_thread.join(timeout=60)
+        if train_thread.is_alive():
+            console.print("[bold red]⚠ Потік навчання не завершився за 60с (daemon, буде вбито при виході)[/bold red]")
 
     if state.get("status") == "running":
         state["status"] = "done"
@@ -459,10 +467,12 @@ def run_all_training() -> None:
     for arch in archs:
         statuses[arch] = "running"
         _show_all_status(archs, statuses, results)
-        history = _run_training_live(arch, configs[arch])
+        history = _run_training_live(arch, configs[arch], transient=False)
         all_histories[arch] = history
-        if history and history[-1].get("val_loss") is not None:
-            results[arch] = {"val_loss": history[-1]["val_loss"], "top1": history[-1].get("val_top1")}
+        valid = [r for r in history if r.get("val_loss") is not None]
+        if valid:
+            best = min(valid, key=lambda r: r["val_loss"])
+            results[arch] = {"val_loss": best["val_loss"], "top1": best.get("val_top1")}
             statuses[arch] = "done"
         else:
             statuses[arch] = "stopped"
@@ -560,10 +570,19 @@ def evaluate_model() -> None:
         console.input("[dim]Enter...[/dim]")
         return
 
+    arch = "baseline"
+    try:
+        ck = torch.load(ckpt, map_location="cpu", weights_only=True)
+        arch = ck.get("config", {}).get("architecture", "baseline")
+        console.print(f"[dim]Архітектура з чекпоінту: {arch}[/dim]")
+    except Exception:
+        console.print("[yellow]Не вдалося прочитати архітектуру з чекпоінту, використовується 'baseline'[/yellow]")
+
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     eval_script = Path(__file__).parent / "evaluate.py"
     cmd = [sys.executable, str(eval_script),
-           "--checkpoint", ckpt, "--manifest", manifest, "--output", output]
+           "--checkpoint", ckpt, "--manifest", manifest,
+           "--output", output, "--architecture", arch]
     console.print(f"\n[dim]$ {' '.join(cmd)}[/dim]\n")
 
     result = subprocess.run(cmd)
