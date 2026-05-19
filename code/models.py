@@ -601,7 +601,9 @@ class GeoCLIPModel(nn.Module, GeoModelMixin):
         Повертає:
             Скалярний loss.
         """
-        temperature = torch.exp(self.log_temperature).clamp(min=0.01, max=10.0)
+        # max=100.0 відповідає CLIP-конвенції logit-scale; init
+        # exp(log(1/0.07))≈14.29 має бути в межах, інакше градієнт=0.
+        temperature = torch.exp(self.log_temperature).clamp(min=0.01, max=100.0)
         N = img_emb.shape[0]
 
         # Матриця подібностей (N, N)

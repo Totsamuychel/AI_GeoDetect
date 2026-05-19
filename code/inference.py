@@ -35,6 +35,45 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Фолбек-центр для невідомих міст: приблизний центр регіону PL/CZ/HU
+# (а не України — реальний датасет охоплює Польщу/Чехію/Угорщину).
+DEFAULT_CENTER: tuple[float, float] = (50.0, 17.5)
+
+
+def _city_centers_from_manifest(
+    manifest_path: Union[str, Path],
+) -> dict[str, tuple[float, float]]:
+    """
+    Обчислює середні (lat, lon) для кожного міста з CSV-маніфесту.
+
+    Має викликатися на TRAIN-маніфесті (без витоку тест-даних),
+    аналогічно evaluate._city_centers_from_df.
+    """
+    import pandas as pd
+
+    path = Path(manifest_path)
+    if not path.exists():
+        logger.warning(f"Маніфест для центрів міст не знайдено: {path}")
+        return {}
+
+    df = pd.read_csv(path, low_memory=False)
+    if not {"city", "lat", "lon"}.issubset(df.columns):
+        logger.warning(
+            f"У маніфесті {path.name} немає колонок city/lat/lon — "
+            f"центри міст не обчислено."
+        )
+        return {}
+
+    df = df.dropna(subset=["city", "lat", "lon"])
+    grouped = df.groupby("city")[["lat", "lon"]].mean()
+    centers = {
+        str(city): (float(row["lat"]), float(row["lon"]))
+        for city, row in grouped.iterrows()
+    }
+    logger.info(f"Центри міст обчислено з {path.name}: {len(centers)} міст")
+    return centers
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Клас інференсу
 # ──────────────────────────────────────────────────────────────────────────────
@@ -51,7 +90,9 @@ class GeoLocator:
         checkpoint_path: Шлях до .pth файлу чекпоінту.
         device:          Пристрій для інференсу (None = автоматично).
         img_size:        Розмір вхідного зображення.
-        city_coords:     Словник {назва_міста: (lat, lon)}.
+        city_coords:     Словник {назва_міста: (lat, lon)} (пріоритет).
+        manifest_path:   TRAIN-маніфест для обчислення центрів міст,
+                         якщо city_coords не передано.
     """
 
     def __init__(
@@ -60,10 +101,20 @@ class GeoLocator:
         device: Optional[torch.device] = None,
         img_size: int = 224,
         city_coords: Optional[dict[str, tuple[float, float]]] = None,
+        manifest_path: Optional[Union[str, Path]] = None,
     ) -> None:
         self.device   = device or get_device()
         self.img_size = img_size
-        self.city_coords = city_coords or UKRAINE_CITY_CENTERS.copy()
+        if city_coords:
+            self.city_coords = dict(city_coords)
+        elif manifest_path:
+            self.city_coords = _city_centers_from_manifest(manifest_path)
+        else:
+            self.city_coords = {}
+            logger.warning(
+                "Не передано city_coords/manifest_path — координати міст "
+                f"будуть наближені до {DEFAULT_CENTER} (центр PL/CZ/HU)."
+            )
 
         self.model, self.class_names, self.config = self._load_model(checkpoint_path)
         self.num_classes = len(self.class_names)
@@ -125,11 +176,11 @@ class GeoLocator:
                 centers[city] = self.city_coords[city]
             else:
                 unknown.append(city)
-                centers[city] = (49.0, 32.0)
+                centers[city] = DEFAULT_CENTER
         if unknown:
             logger.warning(
                 f"Координати не знайдено для {len(unknown)} міст: {unknown}. "
-                f"Використовуємо центр України (49.0, 32.0)."
+                f"Використовуємо фолбек-центр {DEFAULT_CENTER}."
             )
         return centers
 
@@ -201,7 +252,7 @@ class GeoLocator:
             zip(top_probs.tolist(), top_indices.tolist()), start=1
         ):
             city = self.class_names[idx]
-            lat, lon = self._class_centers.get(city, (49.0, 32.0))
+            lat, lon = self._class_centers.get(city, DEFAULT_CENTER)
             predictions.append({
                 "rank": rank,
                 "city": city,
@@ -259,7 +310,7 @@ class GeoLocator:
                     zip(top_probs.tolist(), top_idx.tolist()), start=1
                 ):
                     city = self.class_names[idx]
-                    lat, lon = self._class_centers.get(city, (49.0, 32.0))
+                    lat, lon = self._class_centers.get(city, DEFAULT_CENTER)
                     preds.append({
                         "rank": rank, "city": city,
                         "prob": round(prob, 6), "lat": lat, "lon": lon,
@@ -479,6 +530,8 @@ def parse_args() -> argparse.Namespace:
                         help="Реальна назва міста")
     parser.add_argument("--save-json",   type=str, default=None,
                         help="Шлях для збереження JSON з передбаченнями")
+    parser.add_argument("--manifest",    type=str, default=None,
+                        help="TRAIN-маніфест (CSV) для точних центрів міст")
     parser.add_argument("--no-map",      action="store_true",
                         help="Не генерувати Folium-карту")
     return parser.parse_args()
@@ -491,6 +544,7 @@ def main() -> None:
     locator = GeoLocator(
         checkpoint_path=args.checkpoint,
         img_size=args.img_size,
+        manifest_path=args.manifest,
     )
 
     # Передбачення

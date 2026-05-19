@@ -210,7 +210,7 @@ class CheckpointManager:
         self,
         model: nn.Module,
         optimizer: torch.optim.Optimizer,
-        scheduler: torch.optim.lr_scheduler._LRScheduler,
+        scheduler: torch.optim.lr_scheduler.LRScheduler,
         epoch: int,
         val_loss: float,
         val_acc: float,
@@ -328,7 +328,7 @@ class Logger:
                 project=self.config.wandb_project,
                 name=run_name,
                 config=asdict(self.config),
-                reinit=True,
+                reinit="finish_previous",  # wandb ≥0.16: bool reinit застарів
             )
             logger.info(f"W&B ініціалізовано: {self.config.wandb_project}/{run_name}")
         except ImportError:
@@ -539,7 +539,12 @@ def validate(
                 contrastive = output.get(
                     "contrastive_loss", torch.tensor(0.0, device=device)
                 )
-                loss = criterion(logits, labels) + contrastive_weight * contrastive
+                # InfoNCE з N<2 вироджений (loss≈0) і зміщує val_loss /
+                # early stopping — додаємо контрастивний член лише при N≥2.
+                if images.size(0) >= 2:
+                    loss = criterion(logits, labels) + contrastive_weight * contrastive
+                else:
+                    loss = criterion(logits, labels)
             else:
                 logits = model(images)
                 loss = criterion(logits, labels)
@@ -600,6 +605,11 @@ def train(config: TrainConfig) -> nn.Module:
     logger.info("Завантаження датасету...")
     norm_mean, norm_std = get_norm_for(config.architecture)
     logger.info(f"Нормалізація для {config.architecture}: mean={norm_mean[0]:.3f}…")
+    # Обмежуємо num_workers кількістю CPU (Windows spawn: завеликий
+    # num_workers повільно стартує й перевантажує пам'ять).
+    n_workers = min(config.num_workers, os.cpu_count() or 1)
+    if n_workers != config.num_workers:
+        logger.info(f"num_workers {config.num_workers} → {n_workers} (обмежено CPU)")
     dataloaders = create_dataloaders(
         manifest_path=config.manifest_path,
         train_transform=get_train_transforms(config.img_size, mean=norm_mean, std=norm_std),
@@ -612,7 +622,7 @@ def train(config: TrainConfig) -> nn.Module:
         train_frac=getattr(config, 'train_frac', 0.7),
         val_frac=getattr(config, 'val_frac', 0.15),
         batch_size=config.batch_size,
-        num_workers=config.num_workers,
+        num_workers=n_workers,
         seed=config.seed,
     )
     num_classes  = dataloaders["num_classes"]
@@ -691,7 +701,7 @@ def train(config: TrainConfig) -> nn.Module:
                 _cb=config.progress_callback,
                 _cb_epoch=epoch,
                 _cb_stage=1,
-                _cb_total_epochs=config.stage1_epochs,
+                _cb_total_epochs=total_epochs,
             )
             val_metrics = validate(
                 model, val_loader, criterion,
@@ -742,7 +752,7 @@ def train(config: TrainConfig) -> nn.Module:
             if config.progress_callback:
                 config.progress_callback({
                     "type": "epoch", "stage": 1,
-                    "epoch": epoch, "total_epochs": config.stage1_epochs,
+                    "epoch": epoch, "total_epochs": total_epochs,
                     "train_loss": train_metrics["loss"], "train_acc": train_metrics["acc"],
                     "val_loss": val_metrics["loss"], "val_top1": val_metrics["top1_acc"],
                     "val_macro_f1": val_metrics["macro_f1"], "val_bal_acc": val_metrics["balanced_acc"],
@@ -809,9 +819,9 @@ def train(config: TrainConfig) -> nn.Module:
                 device, scaler, config.grad_clip,
                 use_amp, config.architecture, amp_dtype, cw,
                 _cb=config.progress_callback,
-                _cb_epoch=epoch,
+                _cb_epoch=config.stage1_epochs + epoch,
                 _cb_stage=2,
-                _cb_total_epochs=config.stage2_epochs,
+                _cb_total_epochs=total_epochs,
             )
             val_metrics = validate(
                 model, val_loader, criterion,
@@ -863,7 +873,7 @@ def train(config: TrainConfig) -> nn.Module:
             if config.progress_callback:
                 config.progress_callback({
                     "type": "epoch", "stage": 2,
-                    "epoch": epoch, "total_epochs": config.stage2_epochs,
+                    "epoch": config.stage1_epochs + epoch, "total_epochs": total_epochs,
                     "train_loss": train_metrics["loss"], "train_acc": train_metrics["acc"],
                     "val_loss": val_metrics["loss"], "val_top1": val_metrics["top1_acc"],
                     "val_macro_f1": val_metrics["macro_f1"], "val_bal_acc": val_metrics["balanced_acc"],

@@ -99,7 +99,7 @@ def reverse_geocode(
         raise ImportError("Встановіть geopy: pip install geopy")
 
     geocoder = Nominatim(
-        user_agent="ua_geolocation_diploma/1.0 (contact: research@example.com)",
+        user_agent="ai_geodetect_thesis/1.0",
         timeout=timeout,
     )
 

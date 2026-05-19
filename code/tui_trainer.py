@@ -538,7 +538,9 @@ def run_training(arch: str) -> None:
 
 
 def _show_all_status(archs: list[str], statuses: dict, results: dict) -> None:
-    console.clear()
+    # Без console.clear() — інакше блимання та втрата попереднього виводу
+    # (логів навчання попередньої архітектури). Panel сам відділяє блок.
+    console.print()
     t = Table(box=box.ROUNDED, show_header=False, expand=False)
     t.add_column("icon",  width=4)
     t.add_column("arch",  width=12)
@@ -633,6 +635,12 @@ def run_all_training() -> None:
             statuses[arch] = "done"
         else:
             statuses[arch] = "stopped"
+            console.print(
+                f"\n[bold red]⚠ Архітектуру '{arch}' не натреновано "
+                f"(немає валідних епох — впала або зупинена). "
+                f"Продовжуємо з наступною.[/bold red]\n"
+            )
+            console.input("[dim]Enter → продовжити...[/dim]")
 
     _show_all_status(archs, statuses, results)
     _show_comparison_table(archs, all_histories)
@@ -727,19 +735,20 @@ def evaluate_model() -> None:
         console.input("[dim]Enter...[/dim]")
         return
 
-    arch = "baseline"
+    # Архітектура читається самим evaluate.py з чекпоінту (config.architecture);
+    # тут лише показуємо її користувачу для довідки.
     try:
         ck = torch.load(ckpt, map_location="cpu", weights_only=True)
         arch = ck.get("config", {}).get("architecture", "baseline")
         console.print(f"[dim]Архітектура з чекпоінту: {arch}[/dim]")
     except Exception:
-        console.print("[yellow]Не вдалося прочитати архітектуру з чекпоінту, використовується 'baseline'[/yellow]")
+        console.print("[yellow]Не вдалося прочитати архітектуру з чекпоінту[/yellow]")
 
     Path(output).parent.mkdir(parents=True, exist_ok=True)
     eval_script = Path(__file__).parent / "evaluate.py"
     cmd = [sys.executable, str(eval_script),
            "--checkpoint", ckpt, "--manifest", manifest,
-           "--output", output, "--architecture", arch]
+           "--output", output]
     console.print(f"\n[dim]$ {' '.join(cmd)}[/dim]\n")
 
     result = subprocess.run(cmd)
