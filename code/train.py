@@ -282,7 +282,7 @@ class CheckpointManager:
         Повертає:
             Словник чекпоінту.
         """
-        checkpoint = torch.load(path, map_location=device, weights_only=False)
+        checkpoint = torch.load(path, map_location=device, weights_only=True)
         logger.info(
             f"Чекпоінт завантажено: {Path(path).name} "
             f"(epoch={checkpoint.get('epoch', '?')}, "
@@ -384,7 +384,7 @@ def train_one_epoch(
     optimizer: torch.optim.Optimizer,
     criterion: nn.Module,
     device: torch.device,
-    scaler: GradScaler,
+    scaler: Optional[GradScaler],
     grad_clip: float = 1.0,
     use_amp: bool = True,
     architecture: str = "baseline",
@@ -443,11 +443,16 @@ def train_one_epoch(
                 f"Зупинка для діагностики (lr/AMP/дані)."
             )
 
-        scaler.scale(loss).backward()
-        scaler.unscale_(optimizer)
-        nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
-        scaler.step(optimizer)
-        scaler.update()
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=grad_clip)
+            optimizer.step()
 
         batch_size = images.size(0)
         total_loss    += loss.item() * batch_size
@@ -625,11 +630,11 @@ def train(config: TrainConfig) -> nn.Module:
     # Blackwell: bf16 стабільніший і не потребує GradScaler; fp16 — як фоллбек.
     amp_dtype = (torch.bfloat16 if use_cuda and torch.cuda.is_bf16_supported()
                  else torch.float16)
-    scaler    = GradScaler(enabled=use_amp and amp_dtype == torch.float16)
+    scaler = GradScaler() if (use_amp and amp_dtype == torch.float16) else None
     if use_amp:
         logger.info(
             f"AMP: dtype={amp_dtype}, "
-            f"GradScaler={'on' if scaler.is_enabled() else 'off'}"
+            f"GradScaler={'on' if scaler is not None else 'off (bf16)'}"
         )
     cw = config.contrastive_loss_weight
     exp_logger = Logger(config)
@@ -772,7 +777,8 @@ def train(config: TrainConfig) -> nn.Module:
             scheduler.step()
 
             elapsed = time.time() - t0
-            current_lr = optimizer.param_groups[0]["lr"]
+            lr_head     = optimizer.param_groups[0]["lr"]
+            lr_backbone = optimizer.param_groups[1]["lr"] if len(optimizer.param_groups) > 1 else lr_head
             gpu_gb = 0.0
             if use_cuda:
                 gpu_gb = torch.cuda.max_memory_allocated() / 1e9
@@ -786,20 +792,21 @@ def train(config: TrainConfig) -> nn.Module:
                 f"val_top1={val_metrics['top1_acc']:.4f} "
                 f"val_f1={val_metrics['macro_f1']:.4f} "
                 f"val_bacc={val_metrics['balanced_acc']:.4f} | "
-                f"lr={current_lr:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
+                f"lr_head={lr_head:.2e} lr_bb={lr_backbone:.2e} gpu={gpu_gb:.1f}GB | {elapsed:.1f}s"
             )
 
             global_step += 1
             exp_logger.log({
-                "train/loss":     train_metrics["loss"],
-                "train/acc":      train_metrics["acc"],
-                "val/loss":       val_metrics["loss"],
-                "val/top1_acc":   val_metrics["top1_acc"],
-                "val/macro_f1":   val_metrics["macro_f1"],
-                "val/balanced_acc": val_metrics["balanced_acc"],
-                "lr":             current_lr,
-                "gpu_gb":         gpu_gb,
-                "stage":          2,
+                "train/loss":        train_metrics["loss"],
+                "train/acc":         train_metrics["acc"],
+                "val/loss":          val_metrics["loss"],
+                "val/top1_acc":      val_metrics["top1_acc"],
+                "val/macro_f1":      val_metrics["macro_f1"],
+                "val/balanced_acc":  val_metrics["balanced_acc"],
+                "lr/head":           lr_head,
+                "lr/backbone":       lr_backbone,
+                "gpu_gb":            gpu_gb,
+                "stage":             2,
             }, step=global_step)
 
             ckpt_manager.save(
