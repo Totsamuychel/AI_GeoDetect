@@ -193,6 +193,52 @@ def _show_main_menu() -> str:
     )
     return console.input("[bold orange1]  ›[/bold orange1] ").strip().lower()
 
+# ─── Запит шляхів ────────────────────────────────────────────────────────────
+
+def _prompt_paths(arch: str, config: TrainConfig) -> TrainConfig:
+    """Запитує шляхи до YAML-конфігу і датасету перед запуском навчання."""
+    _, default_yaml = ARCH_INFO[arch]
+    console.print(
+        f"\n[bold orange1]Шляхи до файлів[/bold orange1]"
+        f"  [dim](Enter = залишити поточне)[/dim]\n"
+    )
+
+    # ── YAML-конфіг ──────────────────────────────────────────────────────────
+    yaml_inp = console.input(
+        f"  YAML конфіг    [[dim]{default_yaml}[/dim]]: "
+    ).strip()
+    if yaml_inp:
+        p = Path(yaml_inp)
+        if p.exists():
+            try:
+                new_cfg = _load_yaml_config(str(p))
+                # Зберігаємо поля, що були перевизначені через tui_config.json
+                for fname, *_ in EDITABLE_FIELDS:
+                    setattr(new_cfg, fname, getattr(config, fname))
+                config = new_cfg
+                console.print(f"  [green]✓ Завантажено: {yaml_inp}[/green]")
+            except Exception as exc:
+                console.print(f"  [yellow]Не вдалося прочитати YAML ({exc}). Використовується поточний конфіг.[/yellow]")
+        else:
+            console.print(f"  [yellow]Файл не знайдено: {yaml_inp}[/yellow]")
+
+    # ── Manifest CSV ──────────────────────────────────────────────────────────
+    manifest_inp = console.input(
+        f"  Manifest CSV   [[dim]{config.manifest_path}[/dim]]: "
+    ).strip()
+    if manifest_inp:
+        config.manifest_path = manifest_inp
+
+    # ── Image root ────────────────────────────────────────────────────────────
+    image_root_inp = console.input(
+        f"  Image root     [[dim]{config.image_root}[/dim]]: "
+    ).strip()
+    if image_root_inp:
+        config.image_root = image_root_inp
+
+    return config
+
+
 # ─── Таблиця параметрів ────────────────────────────────────────────────────────
 
 def _show_config_table(arch: str, config: TrainConfig) -> None:
@@ -473,6 +519,8 @@ def _show_results_table(arch: str, history: list[dict], checkpoint_dir: str) -> 
 def run_training(arch: str) -> None:
     config = _load_tui_config(arch)
     console.clear()
+    config = _prompt_paths(arch, config)
+    console.print()
     _show_config_table(arch, config)
     ans = console.input("\nПочати навчання? [y/N]: ").strip().lower()
     if ans != "y":
@@ -541,6 +589,24 @@ def run_all_training() -> None:
     configs = {a: _load_tui_config(a) for a in archs}
     console.clear()
     console.print("[bold cyan]Train ALL THREE models (послідовно)[/bold cyan]\n")
+
+    # Спільні шляхи для всіх архітектур
+    ref = configs["baseline"]
+    console.print("[dim]Шляхи до датасету (однакові для всіх архітектур):[/dim]\n")
+    manifest_inp = console.input(
+        f"  Manifest CSV  [[dim]{ref.manifest_path}[/dim]]: "
+    ).strip()
+    image_root_inp = console.input(
+        f"  Image root    [[dim]{ref.image_root}[/dim]]: "
+    ).strip()
+    if manifest_inp or image_root_inp:
+        for a in archs:
+            if manifest_inp:
+                configs[a].manifest_path = manifest_inp
+            if image_root_inp:
+                configs[a].image_root = image_root_inp
+
+    console.print()
     ans = console.input("Почати? [y/N]: ").strip().lower()
     if ans != "y":
         return
