@@ -26,7 +26,7 @@ import os
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 import torch.nn as nn
@@ -106,6 +106,10 @@ class TrainConfig:
     # Відтворюваність
     seed:              int   = 42
     mixed_precision:   bool  = True
+
+    def __post_init__(self) -> None:
+        # Not a dataclass field → excluded from asdict / checkpoint serialisation.
+        self.progress_callback: Optional[Callable[[dict], None]] = None
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -390,6 +394,10 @@ def train_one_epoch(
     architecture: str = "baseline",
     amp_dtype: torch.dtype = torch.float16,
     contrastive_weight: float = 0.1,
+    _cb: Optional[Callable] = None,
+    _cb_epoch: int = 0,
+    _cb_stage: int = 1,
+    _cb_total_epochs: int = 1,
 ) -> dict[str, float]:
     """
     Навчання моделі протягом однієї епохи.
@@ -410,7 +418,7 @@ def train_one_epoch(
     """
     model.train()
     total_loss = 0.0
-    total_correct = 0
+    total_correct = torch.tensor(0, device=device, dtype=torch.long)
     total_samples = 0
 
     for batch_idx, (images, labels, coords) in enumerate(loader):
@@ -456,12 +464,24 @@ def train_one_epoch(
 
         batch_size = images.size(0)
         total_loss    += loss.item() * batch_size
-        total_correct += top_k_accuracy_torch(logits, labels, k=1).item() * batch_size
+        total_correct += (logits.argmax(dim=1) == labels).sum()
         total_samples += batch_size
+
+        if _cb:
+            _cb({
+                "type":          "batch",
+                "stage":         _cb_stage,
+                "epoch":         _cb_epoch,
+                "total_epochs":  _cb_total_epochs,
+                "batch":         batch_idx + 1,
+                "total_batches": len(loader),
+                "running_loss":  total_loss / max(total_samples, 1),
+                "running_acc":   total_correct.item() / max(total_samples, 1),
+            })
 
         if (batch_idx + 1) % 50 == 0:
             avg_loss = total_loss / total_samples
-            avg_acc  = total_correct / total_samples
+            avg_acc  = total_correct.item() / total_samples
             logger.debug(
                 f"  Batch [{batch_idx+1}/{len(loader)}] "
                 f"loss={avg_loss:.4f} acc={avg_acc:.4f}"
@@ -469,7 +489,7 @@ def train_one_epoch(
 
     return {
         "loss": total_loss / max(total_samples, 1),
-        "acc":  total_correct / max(total_samples, 1),
+        "acc":  total_correct.item() / max(total_samples, 1),
     }
 
 
@@ -666,6 +686,10 @@ def train(config: TrainConfig) -> nn.Module:
                 model, train_loader, optimizer, criterion,
                 device, scaler, config.grad_clip,
                 use_amp, config.architecture, amp_dtype, cw,
+                _cb=config.progress_callback,
+                _cb_epoch=epoch,
+                _cb_stage=1,
+                _cb_total_epochs=config.stage1_epochs,
             )
             val_metrics = validate(
                 model, val_loader, criterion,
@@ -710,7 +734,18 @@ def train(config: TrainConfig) -> nn.Module:
                 config, class_names,
             )
 
-            if early_stop(val_metrics["loss"]):
+            _stop = early_stop(val_metrics["loss"])
+            if config.progress_callback:
+                config.progress_callback({
+                    "type": "epoch", "stage": 1,
+                    "epoch": epoch, "total_epochs": config.stage1_epochs,
+                    "train_loss": train_metrics["loss"], "train_acc": train_metrics["acc"],
+                    "val_loss": val_metrics["loss"], "val_top1": val_metrics["top1_acc"],
+                    "val_macro_f1": val_metrics["macro_f1"], "val_bal_acc": val_metrics["balanced_acc"],
+                    "best_val_loss": early_stop.best_value, "early_stop_counter": early_stop.counter,
+                    "lr_head": current_lr, "lr_backbone": None, "elapsed_sec": elapsed,
+                })
+            if _stop:
                 logger.info("Early stopping спрацював на Стадії 1")
                 break
 
@@ -769,6 +804,10 @@ def train(config: TrainConfig) -> nn.Module:
                 model, train_loader, optimizer, criterion,
                 device, scaler, config.grad_clip,
                 use_amp, config.architecture, amp_dtype, cw,
+                _cb=config.progress_callback,
+                _cb_epoch=epoch,
+                _cb_stage=2,
+                _cb_total_epochs=config.stage2_epochs,
             )
             val_metrics = validate(
                 model, val_loader, criterion,
@@ -816,7 +855,18 @@ def train(config: TrainConfig) -> nn.Module:
                 config, class_names,
             )
 
-            if early_stop(val_metrics["loss"]):
+            _stop = early_stop(val_metrics["loss"])
+            if config.progress_callback:
+                config.progress_callback({
+                    "type": "epoch", "stage": 2,
+                    "epoch": epoch, "total_epochs": config.stage2_epochs,
+                    "train_loss": train_metrics["loss"], "train_acc": train_metrics["acc"],
+                    "val_loss": val_metrics["loss"], "val_top1": val_metrics["top1_acc"],
+                    "val_macro_f1": val_metrics["macro_f1"], "val_bal_acc": val_metrics["balanced_acc"],
+                    "best_val_loss": early_stop.best_value, "early_stop_counter": early_stop.counter,
+                    "lr_head": lr_head, "lr_backbone": lr_backbone, "elapsed_sec": elapsed,
+                })
+            if _stop:
                 logger.info("Early stopping спрацював на Стадії 2")
                 break
 
