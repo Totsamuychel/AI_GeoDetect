@@ -364,10 +364,11 @@ class GeoDataset(Dataset):
         у DataLoader давав чистий тензор форми (N, 2), а не фрагментовану
         структуру, що залежить від версії PyTorch.
         """
+        row = self.df.iloc[idx]
+
         if self.cache_images and idx in self._cache:
             img_tensor = self._cache[idx]
         else:
-            row = self.df.iloc[idx]
             try:
                 img = self._load_image(str(row["filepath"]))
                 if self.transform:
@@ -386,7 +387,6 @@ class GeoDataset(Dataset):
             if self.cache_images:
                 self._cache[idx] = img_tensor
 
-        row = self.df.iloc[idx]
         city = str(row.get("city", "unknown")) if pd.notna(row.get("city")) else "unknown"
         city_idx = self._city_to_idx.get(city, 0)
         lat = float(row["lat"])

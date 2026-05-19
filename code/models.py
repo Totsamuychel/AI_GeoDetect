@@ -52,22 +52,27 @@ class GeoModelMixin:
         Повертає:
             Список словників [{'class': str, 'index': int, 'prob': float}, ...].
         """
+        was_training = self.training
         self.eval()
+
         if x.ndim == 3:
             x = x.unsqueeze(0)
 
-        # Отримуємо логіти (підтримка як тензора, так і словника для GeoCLIP)
-        output = self.forward(x)
-        logits = output["logits"] if isinstance(output, dict) else output
+        try:
+            # Отримуємо логіти (підтримка як тензора, так і словника для GeoCLIP)
+            output = self.forward(x)
+            logits = output["logits"] if isinstance(output, dict) else output
 
-        probs = F.softmax(logits, dim=1)
-        top_probs, top_indices = probs.topk(min(top_k, self.num_classes), dim=1)
+            probs = F.softmax(logits, dim=1)
+            top_probs, top_indices = probs.topk(min(top_k, self.num_classes), dim=1)
 
-        results = []
-        # Беремо перше зображення з батчу
-        for prob, idx in zip(top_probs[0].tolist(), top_indices[0].tolist()):
-            name = class_names[idx] if class_names and idx < len(class_names) else str(idx)
-            results.append({"class": name, "index": idx, "prob": round(prob, 6)})
+            results = []
+            # Беремо перше зображення з батчу
+            for prob, idx in zip(top_probs[0].tolist(), top_indices[0].tolist()):
+                name = class_names[idx] if class_names and idx < len(class_names) else str(idx)
+                results.append({"class": name, "index": idx, "prob": round(prob, 6)})
+        finally:
+            self.train(was_training)
 
         return results
 
@@ -401,7 +406,7 @@ class RandomFourierGPSEncoder(nn.Module):
         return F.normalize(emb, dim=1)
 
 
-class GeoCLIPModel(nn.Module):
+class GeoCLIPModel(nn.Module, GeoModelMixin):
     """
     GeoCLIP: CLIP ViT image encoder + GPS Location Encoder.
 
@@ -628,21 +633,26 @@ class GeoCLIPModel(nn.Module):
             coords_list: Список GPS-координат (lat, lon) для галереї.
             batch_size:  Розмір батчу для обчислення embeddings.
         """
+        was_training = self.training
         self.eval()
-        coords_tensor = torch.tensor(coords_list, dtype=torch.float32)
-        all_embs = []
 
-        for start in range(0, len(coords_tensor), batch_size):
-            batch_coords = coords_tensor[start:start + batch_size]
-            # Переносимо на пристрій моделі
-            device = next(self.parameters()).device
-            batch_coords = batch_coords.to(device)
-            embs = self.encode_gps(batch_coords)
-            all_embs.append(embs.cpu())
+        try:
+            coords_tensor = torch.tensor(coords_list, dtype=torch.float32)
+            all_embs = []
 
-        self.gallery_coords     = coords_tensor
-        self.gallery_embeddings = torch.cat(all_embs, dim=0)
-        logger.info(f"Gallery побудовано: {len(coords_list)} локацій")
+            for start in range(0, len(coords_tensor), batch_size):
+                batch_coords = coords_tensor[start:start + batch_size]
+                # Переносимо на пристрій моделі
+                device = next(self.parameters()).device
+                batch_coords = batch_coords.to(device)
+                embs = self.encode_gps(batch_coords)
+                all_embs.append(embs.cpu())
+
+            self.gallery_coords     = coords_tensor
+            self.gallery_embeddings = torch.cat(all_embs, dim=0)
+            logger.info(f"Gallery побудовано: {len(coords_list)} локацій")
+        finally:
+            self.train(was_training)
 
     @torch.no_grad()
     def retrieve_gps(
@@ -662,19 +672,25 @@ class GeoCLIPModel(nn.Module):
             - coords:       (N, top_k, 2) — координати топ-K локацій
             - similarities: (N, top_k) — косинусна подібність
         """
-        if pixel_values.ndim == 3:
-            pixel_values = pixel_values.unsqueeze(0)
+        was_training = self.training
+        self.eval()
 
-        img_emb = self.encode_image(pixel_values)  # (N, D)
+        try:
+            if pixel_values.ndim == 3:
+                pixel_values = pixel_values.unsqueeze(0)
 
-        device = img_emb.device
-        gallery_emb = self.gallery_embeddings.to(device)  # (G, D)
+            img_emb = self.encode_image(pixel_values)  # (N, D)
 
-        sim = img_emb @ gallery_emb.T  # (N, G)
-        top_sim, top_idx = sim.topk(min(top_k, gallery_emb.shape[0]), dim=1)  # (N, k)
+            device = img_emb.device
+            gallery_emb = self.gallery_embeddings.to(device)  # (G, D)
 
-        gallery_coords = self.gallery_coords.to(device)
-        top_coords = gallery_coords[top_idx]  # (N, k, 2)
+            sim = img_emb @ gallery_emb.T  # (N, G)
+            top_sim, top_idx = sim.topk(min(top_k, gallery_emb.shape[0]), dim=1)  # (N, k)
+
+            gallery_coords = self.gallery_coords.to(device)
+            top_coords = gallery_coords[top_idx]  # (N, k, 2)
+        finally:
+            self.train(was_training)
 
         return top_coords, top_sim
 

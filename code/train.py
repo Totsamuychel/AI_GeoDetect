@@ -133,7 +133,11 @@ class EarlyStopping:
         self.patience  = patience
         self.min_delta = min_delta
         self.mode      = mode
-        self.counter   = 0
+        self.reset()
+
+    def reset(self) -> None:
+        """Скидає стан ранньої зупинки для нового етапу навчання."""
+        self.counter = 0
         self.best_value: Optional[float] = None
         self.should_stop = False
 
@@ -705,9 +709,8 @@ def train(config: TrainConfig) -> nn.Module:
                 logger.info("Early stopping спрацював на Стадії 1")
                 break
 
-        # Скидання лічильника early stop між стадіями
-        early_stop.counter = 0
-        early_stop.should_stop = False
+        # Скидання стану early stop між стадіями
+        early_stop.reset()
 
     # ── Стадія 2: Розморожування шарів ───────────────────────────────────────
     if config.stage2_epochs > 0:
