@@ -11,6 +11,12 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# Force UTF-8 output on Windows (prevents cp1252 UnicodeEncodeError with Rich)
+if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
+    sys.stdout.reconfigure(encoding="utf-8")
+if sys.stderr.encoding and sys.stderr.encoding.lower() != "utf-8":
+    sys.stderr.reconfigure(encoding="utf-8")
+
 import json
 import queue
 import subprocess
@@ -30,7 +36,7 @@ from rich.text import Text
 
 from train import TrainConfig, train as _train_model
 
-console = Console()
+console = Console(legacy_windows=False)
 
 # ─── Константи ────────────────────────────────────────────────────────────────
 
