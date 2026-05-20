@@ -33,9 +33,9 @@ class TestHaversineDistance:
         assert haversine_distance(50.45, 30.52, 50.45, 30.52) == pytest.approx(0.0, abs=1e-6)
 
     def test_warsaw_to_budapest(self) -> None:
-        """Warsaw → Budapest приблизно 523 км."""
+        """Warsaw → Budapest приблизно 544 км."""
         d = haversine_distance(52.2297, 21.0122, 47.4979, 19.0402)
-        assert 510.0 < d < 540.0
+        assert 530.0 < d < 560.0
 
     def test_symmetry(self) -> None:
         """d(A,B) == d(B,A)."""
