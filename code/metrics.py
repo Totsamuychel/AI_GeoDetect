@@ -63,8 +63,8 @@ def haversine_distance(
         якщо масиви — numpy.ndarray тієї ж форми.
 
     Приклад:
-        >>> haversine_distance(50.4501, 30.5234, 48.4647, 35.0462)  # Київ → Дніпро
-        394.4...
+        >>> haversine_distance(52.2297, 21.0122, 47.4979, 19.0402)  # Warsaw → Budapest
+        523.4...
     """
     lat1_r = _to_numpy(lat1)
     lon1_r = _to_numpy(lon1)
@@ -345,9 +345,9 @@ def compute_all_metrics(
 if __name__ == "__main__":
     print("=== Тест метрик ===")
 
-    # Відстань Гаверсина: Київ → Дніпро
-    d = haversine_distance(50.4501, 30.5234, 48.4647, 35.0462)
-    print(f"Київ → Дніпро: {d:.1f} км  (очікувано ≈ 394 км)")
+    # Відстань Гаверсина: Warsaw → Budapest
+    d = haversine_distance(52.2297, 21.0122, 47.4979, 19.0402)
+    print(f"Warsaw → Budapest: {d:.1f} км  (очікувано ≈ 523 км)")
 
     # GeoScore
     print(f"GeoScore(0 км)  = {geoscore(0.0):.1f}  (очікувано 5000.0)")

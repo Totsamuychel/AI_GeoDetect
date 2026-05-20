@@ -74,12 +74,12 @@ class TestGeoDataset:
         assert len(ds_high) <= len(ds_low)
 
     def test_country_filter(self, dummy_manifest: Path) -> None:
-        ds = GeoDataset(dummy_manifest, countries=["UA"])
-        assert (ds.df["country"].str.upper() == "UA").all()
+        ds = GeoDataset(dummy_manifest, countries=["PL"])
+        assert (ds.df["country"].str.upper() == "PL").all()
 
     def test_city_filter(self, dummy_manifest: Path) -> None:
-        ds = GeoDataset(dummy_manifest, cities=["Київ"])
-        assert (ds.df["city"] == "Київ").all()
+        ds = GeoDataset(dummy_manifest, cities=["Warsaw"])
+        assert (ds.df["city"] == "Warsaw").all()
 
     def test_getitem_fallback_returns_tensors(self, dummy_manifest: Path) -> None:
         """Файлів на диску немає → має спрацювати fallback_on_error=True."""

@@ -532,8 +532,8 @@ if __name__ == "__main__":
     print(f"Пристрій: {device}")
 
     # Зворотне геокодування (тест API-запиту)
-    print("Тест reverse_geocode (Київ)...")
-    result = reverse_geocode(50.4501, 30.5234)
+    print("Тест reverse_geocode (Warsaw)...")
+    result = reverse_geocode(52.2297, 21.0122)
     print(f"  Результат: {result}")
 
     print("Всі тести пройдено успішно!")

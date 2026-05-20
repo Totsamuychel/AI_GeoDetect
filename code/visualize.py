@@ -745,7 +745,7 @@ if __name__ == "__main__":
         n, c = 200, 5
         y_true = np.random.randint(0, c, n)
         y_pred = np.random.randint(0, c, n)
-        class_names = ["Київ", "Харків", "Одеса", "Дніпро", "Львів"]
+        class_names = ["Warsaw", "Prague", "Budapest"]
 
         fig = plot_confusion_matrix(
             y_true, y_pred, class_names,

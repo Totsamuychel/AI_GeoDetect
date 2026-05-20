@@ -176,7 +176,7 @@ class GeoDataset(Dataset):
         transform:   Функція трансформації зображень.
 
     Приклад:
-        >>> dataset = GeoDataset("data/manifest.csv", countries=["UA"])
+        >>> dataset = GeoDataset("data/manifest.csv", countries=["PL", "CZ", "HU"])
         >>> img, city_idx, (lat, lon) = dataset[0]
         >>> print(img.shape, city_idx, lat, lon)
     """
@@ -683,23 +683,12 @@ def create_dummy_manifest(
         DataFrame із синтетичним маніфестом.
     """
     if cities is None:
-        cities = [
-            "Київ", "Харків", "Одеса", "Дніпро", "Запоріжжя",
-            "Львів", "Кривий Ріг", "Миколаїв", "Вінниця", "Херсон",
-        ]
+        cities = ["Warsaw", "Prague", "Budapest"]
 
-    # Приблизні координати центрів міст України
     city_centers = {
-        "Київ":        (50.4501, 30.5234),
-        "Харків":      (49.9935, 36.2304),
-        "Одеса":       (46.4825, 30.7233),
-        "Дніпро":      (48.4647, 35.0462),
-        "Запоріжжя":   (47.8388, 35.1396),
-        "Львів":       (49.8397, 24.0297),
-        "Кривий Ріг":  (47.9078, 33.3845),
-        "Миколаїв":    (46.9750, 31.9946),
-        "Вінниця":     (49.2330, 28.4682),
-        "Херсон":      (46.6354, 32.6169),
+        "Warsaw":   (52.2297, 21.0122),
+        "Prague":   (50.0755, 14.4378),
+        "Budapest": (47.4979, 19.0402),
     }
 
     rng = np.random.default_rng(seed)
@@ -716,8 +705,8 @@ def create_dummy_manifest(
             "filepath":     f"images/{city}/{i:06d}.jpg",
             "lat":          round(lat, 6),
             "lon":          round(lon, 6),
-            "country":      "UA",
-            "region":       "Невідомо",
+            "country":      {"Warsaw": "PL", "Prague": "CZ", "Budapest": "HU"}.get(city, "PL"),
+            "region":       city,
             "city":         city,
             "source":       rng.choice(["mapillary", "osv5m"]),
             "capture_date": f"2023-{rng.integers(1,13):02d}-{rng.integers(1,29):02d}",
@@ -752,7 +741,7 @@ if __name__ == "__main__":
         dataset = GeoDataset(
             manifest_path=manifest_path,
             transform=None,
-            countries=["UA"],
+            countries=["PL", "CZ", "HU"],
             quality_threshold=0.5,
         )
         print(f"Датасет: {len(dataset)} зразків, {dataset.num_classes} міст")
