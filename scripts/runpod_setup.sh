@@ -46,12 +46,57 @@ PY
 echo "==> pip install -r requirements.txt (non-torch deps)"
 pip install --no-input -r requirements.txt
 
+echo "==> Dataset validation"
+python - <<'PY'
+import pandas as pd, sys
+from pathlib import Path
+root = Path("dataset")
+ok = True
+for split in ["train", "val", "test"]:
+    p = root / "manifests" / f"{split}.csv"
+    if not p.exists():
+        print(f"  MISSING: {p}"); ok = False; continue
+    df = pd.read_csv(p)
+    cities = sorted(df["city"].dropna().unique().tolist())
+    print(f"  {split:5s}: {len(df):5d} rows | cities={cities}")
+if not ok:
+    sys.exit("[ERROR] Missing manifests — check dataset upload")
+print("[OK] Manifests valid")
+
+import random, os
+random.seed(42)
+all_paths = []
+for split in ["train","val","test"]:
+    df = pd.read_csv(root / "manifests" / f"{split}.csv")
+    all_paths += df["filepath"].tolist()
+sample = random.sample(all_paths, 50)
+missing = [p for p in sample if not (root / p).exists()]
+if missing:
+    print(f"[ERROR] {len(missing)}/50 sample images missing:")
+    for p in missing[:5]: print(f"  {p}")
+    sys.exit(1)
+print("[OK] 50/50 sample images found")
+PY
+
+echo "==> Pre-download HuggingFace models (avoids timeout during training)"
+python - <<'PY'
+from transformers import CLIPModel, CLIPProcessor
+print("  Downloading geolocal/StreetCLIP (~1.7 GB)...")
+CLIPModel.from_pretrained("geolocal/StreetCLIP")
+CLIPProcessor.from_pretrained("geolocal/StreetCLIP")
+print("  [OK] StreetCLIP cached")
+PY
+
 echo "==> pytest"
 # -p no:debugging: the repo's code/ package shadows stdlib `code`, which the
 # pytest pdb plugin imports at configure time. Disabling it is harmless.
 pytest -q -p no:debugging tests/ || { echo "[WARN] tests reported failures — review before training"; }
 
+echo ""
 echo "==> Done. Next:"
 echo "    python code/train.py --config configs/baseline.yaml"
 echo "    python code/train.py --config configs/streetclip.yaml"
 echo "    python code/train.py --config configs/geoclip.yaml"
+echo ""
+echo "    Or run all 3 sequentially:"
+echo "    bash scripts/runpod_train_all.sh"

@@ -1,0 +1,42 @@
+# smoke_test.yaml — 1 епоха для перевірки pipeline на локальній 3090
+# Запуск: conda run -n visomaster python code/train.py --config configs/smoke_test.yaml
+
+manifest_path:      "dataset/manifests/train.csv"
+image_root:         "dataset"
+countries:
+  - "PL"
+  - "CZ"
+  - "HU"
+quality_threshold:  0.0
+split_method:       "prebuilt"   # train/val/test.csv вже готові, h3/kmeans не потрібні
+img_size:           224
+
+architecture:       "baseline"
+pretrained:         true
+
+# 1 епоха = тільки Stage 1
+stage1_epochs:      1
+stage1_lr:          0.001
+stage1_unfreeze_n:  0
+
+stage2_epochs:      0
+stage2_lr:          0.0001
+stage2_unfreeze_n:  0
+
+weight_decay:       0.01
+batch_size:         32
+num_workers:        2
+grad_clip:          1.0
+contrastive_loss_weight: 0.1
+
+patience:           7
+min_delta:          0.0001
+
+use_wandb:          false
+use_mlflow:         false
+
+checkpoint_dir:     "checkpoints/smoke_test"
+save_top_k:         1
+
+seed:               42
+mixed_precision:    true
