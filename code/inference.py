@@ -178,11 +178,15 @@ class GeoLocator:
 
     def _build_class_centers(self) -> dict[str, tuple[float, float]]:
         """Будує словник координат центрів для класів моделі."""
+        # Case-insensitive lookup: чекпоінт міг містити «warsaw», а маніфест
+        # — «Warsaw». Нормалізуємо обидві сторони до lowercase.
+        coords_lower = {str(k).lower(): v for k, v in self.city_coords.items()}
         centers: dict[str, tuple[float, float]] = {}
         unknown = []
         for city in self.class_names:
-            if city in self.city_coords:
-                centers[city] = self.city_coords[city]
+            key = str(city).lower()
+            if key in coords_lower:
+                centers[city] = coords_lower[key]
             else:
                 unknown.append(city)
                 centers[city] = DEFAULT_CENTER

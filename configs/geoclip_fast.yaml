@@ -3,15 +3,14 @@
 # =============================================================================
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
-manifest_path:      "dataset/raw/mapillary/manifest.csv"
+manifest_path:      "dataset/manifests/train.csv"
 image_root:         "dataset"
 countries:
   - "PL"
   - "CZ"
   - "HU"
 quality_threshold:  0.0
-split_method:       "h3"
-h3_resolution:      7
+split_method:       "prebuilt"
 img_size:           224            # CLIP ViT очікує 224px
 
 # ── Архітектура ──────────────────────────────────────────────────────────────

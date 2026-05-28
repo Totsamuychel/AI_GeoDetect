@@ -29,9 +29,7 @@ dataset/raw/images/
 dataset/raw/osv5m/images/
 dataset/processed/images/
 
-# Ignore split files if they are huge
-dataset/manifests/train.csv
-dataset/manifests/val.csv
+# manifests are small CSV files — tracked in git
 
 # Cache
 .cache/
@@ -55,6 +53,21 @@ mlruns/
 *.log
 tmp/
 temp/
+
+# ── RunPod upload artifacts ──────────────────────────────────────────────────
+diploma_dataset.tar.gz
+diploma_code.zip
+runpod_upload/
+
+# ── Auto-generated per-source manifests (regenerable from raw images) ────────
+dataset/raw/mapillary/manifest.csv
+dataset/raw/mapillary/*/manifest.csv
+dataset/raw/global_streetscapes/manifest.csv
+dataset/raw/osv5m/filtered_cities.parquet
+
+# ── IDE / local ──────────────────────────────────────────────────────────────
+.claude/settings.local.json
+.vscode/
 
 # ── OS files ─────────────────────────────────────────────────────────────────
 .DS_Store

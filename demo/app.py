@@ -40,9 +40,10 @@ _TRANSFORM = None
 _DEVICE: Optional[torch.device] = None
 _CITY_CENTERS: dict[str, tuple[float, float]] = {
     # Fallback для карти, якщо метадані відсутні в чекпоінті.
-    "Warsaw":   (52.2297, 21.0122),
-    "Prague":   (50.0755, 14.4378),
-    "Budapest": (47.4979, 19.0402),
+    # Ключі lowercase — збігаються з class_names у чекпоінті (з маніфесту).
+    "warsaw":   (52.2297, 21.0122),
+    "prague":   (50.0755, 14.4378),
+    "budapest": (47.4979, 19.0402),
 }
 
 

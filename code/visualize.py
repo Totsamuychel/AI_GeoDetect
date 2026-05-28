@@ -742,10 +742,10 @@ if __name__ == "__main__":
 
         # Матриця плутанини
         np.random.seed(42)
-        n, c = 200, 5
+        class_names = ["warsaw", "prague", "budapest"]
+        n, c = 200, len(class_names)
         y_true = np.random.randint(0, c, n)
         y_pred = np.random.randint(0, c, n)
-        class_names = ["Warsaw", "Prague", "Budapest"]
 
         fig = plot_confusion_matrix(
             y_true, y_pred, class_names,

@@ -43,7 +43,6 @@ from augmentations import get_val_transforms, get_norm_for
 from dataset import GeoDataset
 from metrics import (
     balanced_accuracy,
-    compute_all_metrics,
     geoscore,
     haversine_distance,
     macro_f1,
@@ -210,10 +209,24 @@ def evaluate(
         quality_threshold=quality_threshold,
         image_root=image_root,
     )
-    # Синхронізація класів
-    full_dataset.class_names  = class_names
-    full_dataset._city_to_idx = {c: i for i, c in enumerate(class_names)}
+    # Захист від case-mismatch: чекпоінт міг зберегти class_names в одному
+    # регістрі, а маніфест містить інший. Нормалізуємо й тут, і там.
+    manifest_cities = {str(c).lower() for c in full_dataset.df["city"].dropna().unique()}
+    ckpt_cities     = {str(c).lower() for c in class_names}
+    missing = ckpt_cities - manifest_cities
+    if missing:
+        logger.warning(
+            f"У маніфесті немає міст із чекпоінту: {missing}. "
+            f"Зразки цих класів даватимуть мітку 0."
+        )
+
+    # Синхронізація класів (lowercase щоб уникнути «warsaw» != «Warsaw»)
+    full_dataset.df["city"]   = full_dataset.df["city"].astype(str).str.lower()
+    class_names_lower         = [str(c).lower() for c in class_names]
+    full_dataset.class_names  = class_names_lower
+    full_dataset._city_to_idx = {c: i for i, c in enumerate(class_names_lower)}
     full_dataset.num_classes  = num_classes
+    class_names = class_names_lower
 
     if split_method == "prebuilt" or not use_test_split:
         # Маніфест уже є цільовим (test) сплітом — оцінюємо як є.
@@ -232,6 +245,7 @@ def evaluate(
         image_root=image_root,
         subset_indices=test_idx,
     )
+    test_dataset.df["city"]   = test_dataset.df["city"].astype(str).str.lower()
     test_dataset.class_names  = class_names
     test_dataset._city_to_idx = {c: i for i, c in enumerate(class_names)}
     test_dataset.num_classes  = num_classes

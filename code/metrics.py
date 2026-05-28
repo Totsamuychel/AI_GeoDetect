@@ -250,9 +250,9 @@ def _logits_labels_to_preds(
 ) -> tuple[np.ndarray, np.ndarray]:
     """(logits, labels) → (pred_indices, labels) як int64 numpy-масиви."""
     if isinstance(logits, torch.Tensor):
-        logits_np = logits.detach().cpu().numpy()
+        logits_np = logits.detach().cpu().float().numpy()
     else:
-        logits_np = np.asarray(logits)
+        logits_np = np.asarray(logits, dtype=np.float32)
     if isinstance(labels, torch.Tensor):
         labels_np = labels.detach().cpu().numpy().astype(np.int64)
     else:

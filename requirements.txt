@@ -61,7 +61,7 @@ tqdm>=4.66,<5.0
 PyYAML>=6.0,<7.0
 python-dotenv>=1.0,<2.0
 requests>=2.31,<3.0
-rich>=13.0,<14.0
+rich>=13.0,<15.0
 
 # ── Dataset download (optional) ─────────────────────────────────────────────
 # Used in download_data.py for Mapillary image retrieval.

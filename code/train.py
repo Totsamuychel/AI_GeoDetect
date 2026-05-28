@@ -61,8 +61,10 @@ class TrainConfig:
     image_root:        str   = "dataset"
     countries:         list  = field(default_factory=lambda: ["PL", "CZ", "HU"])
     quality_threshold: float = 0.4
-    split_method:      str   = "h3"       # 'h3' або 'kmeans'
+    split_method:      str   = "h3"       # 'h3', 'kmeans' або 'prebuilt'
     h3_resolution:     int   = 4          # Рівень деталізації H3 (3-9)
+    train_frac:        float = 0.7        # використовується лише для h3/kmeans
+    val_frac:          float = 0.15       # використовується лише для h3/kmeans
     img_size:          int   = 224
 
     # Архітектура
@@ -93,7 +95,7 @@ class TrainConfig:
     # Логування
     use_wandb:         bool  = False
     use_mlflow:        bool  = False
-    wandb_project:     str   = "ua-street-geolocation"
+    wandb_project:     str   = "geolocation-warsaw-prague-budapest"
     wandb_run_name:    str   = ""
     mlflow_uri:        str   = "mlruns"
     experiment_name:   str   = "geolocation"
@@ -619,8 +621,8 @@ def train(config: TrainConfig) -> nn.Module:
         image_root=config.image_root if config.image_root else None,
         split_method=config.split_method,
         h3_resolution=config.h3_resolution,
-        train_frac=getattr(config, 'train_frac', 0.7),
-        val_frac=getattr(config, 'val_frac', 0.15),
+        train_frac=config.train_frac,
+        val_frac=config.val_frac,
         batch_size=config.batch_size,
         num_workers=n_workers,
         seed=config.seed,

@@ -682,13 +682,15 @@ def create_dummy_manifest(
     Повертає:
         DataFrame із синтетичним маніфестом.
     """
+    # Lowercase — збігається з конвенцією реальних маніфестів
+    # (dataset/manifests/{train,val,test}.csv).
     if cities is None:
-        cities = ["Warsaw", "Prague", "Budapest"]
+        cities = ["warsaw", "prague", "budapest"]
 
     city_centers = {
-        "Warsaw":   (52.2297, 21.0122),
-        "Prague":   (50.0755, 14.4378),
-        "Budapest": (47.4979, 19.0402),
+        "warsaw":   (52.2297, 21.0122),
+        "prague":   (50.0755, 14.4378),
+        "budapest": (47.4979, 19.0402),
     }
 
     rng = np.random.default_rng(seed)
@@ -705,7 +707,7 @@ def create_dummy_manifest(
             "filepath":     f"images/{city}/{i:06d}.jpg",
             "lat":          round(lat, 6),
             "lon":          round(lon, 6),
-            "country":      {"Warsaw": "PL", "Prague": "CZ", "Budapest": "HU"}.get(city, "PL"),
+            "country":      {"warsaw": "PL", "prague": "CZ", "budapest": "HU"}.get(city, "PL"),
             "region":       city,
             "city":         city,
             "source":       rng.choice(["mapillary", "osv5m"]),
