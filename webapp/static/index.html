@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Геолокація вуличних фото — Варшава · Прага · Будапешт</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="brand">
+      <div class="brand-mark">◴</div>
+      <div>
+        <h1>Геолокація вуличних фото</h1>
+        <p class="tagline">Нейромережа визначає місто за фотографією вулиці</p>
+      </div>
+    </div>
+    <nav class="nav">
+      <a href="#predict" class="nav-link">Розпізнавання</a>
+      <a href="#anatomy" class="nav-link">Анатомія моделей</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- ───────────────────────── РОЗПІЗНАВАННЯ ───────────────────────── -->
+    <section id="predict" class="panel">
+      <div class="panel-head">
+        <h2>Завантажте фото вулиці</h2>
+        <p>Модель спробує вгадати, до якого з трьох міст належить знімок:
+           <b>Варшава</b>, <b>Прага</b> або <b>Будапешт</b>. Якщо фото не схоже
+           на жодне з них — система повідомить про це.</p>
+      </div>
+
+      <div class="predict-grid">
+        <!-- Ліва колонка: завантаження + вибір моделі -->
+        <div class="col-left">
+          <div id="dropzone" class="dropzone" tabindex="0">
+            <input id="fileInput" type="file" accept="image/*" hidden />
+            <div id="dropPrompt" class="drop-prompt">
+              <div class="drop-icon">⇪</div>
+              <p><b>Перетягніть фото сюди</b></p>
+              <p class="muted">або натисніть, щоб обрати файл</p>
+            </div>
+            <img id="preview" class="preview" alt="Перегляд фото" hidden />
+          </div>
+
+          <div class="model-picker">
+            <span class="picker-label">Оберіть модель:</span>
+            <div id="modelList" class="model-list"><!-- заповнюється JS --></div>
+          </div>
+
+          <button id="predictBtn" class="btn-primary" disabled>
+            <span class="btn-text">Визначити місто</span>
+            <span class="spinner" hidden></span>
+          </button>
+        </div>
+
+        <!-- Права колонка: результати -->
+        <div class="col-right">
+          <div id="resultPlaceholder" class="result-placeholder">
+            <div class="ph-icon">🗺️</div>
+            <p>Тут з'являться результати розпізнавання</p>
+          </div>
+
+          <div id="resultBox" class="result-box" hidden>
+            <div id="oodBanner" class="ood-banner" hidden></div>
+            <div id="verdict" class="verdict"></div>
+            <div id="bars" class="bars"></div>
+            <div class="map-wrap">
+              <svg id="miniMap" viewBox="0 0 320 240" class="mini-map" aria-label="Карта міст"></svg>
+            </div>
+            <p id="modelMeta" class="model-meta"></p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────────────────── 3D АНАТОМІЯ ───────────────────────── -->
+    <section id="anatomy" class="panel">
+      <div class="panel-head">
+        <h2>3D-анатомія моделей</h2>
+        <p>Подивіться, як влаштована кожна нейромережа зсередини.
+           <b>Обертайте</b> сцену мишею, <b>наближайте</b> колесом і
+           <b>натискайте</b> на блоки, щоб прочитати, що вони роблять.</p>
+      </div>
+
+      <div class="anatomy-tabs" id="anatomyTabs"><!-- заповнюється JS --></div>
+
+      <div class="anatomy-grid">
+        <div id="canvasHost" class="canvas-host">
+          <div class="canvas-hint">🖱️ ЛКМ — обертати · колесо — масштаб · ПКМ — зсув</div>
+          <button id="fullscreenBtn" class="fs-btn" title="На весь екран">⛶</button>
+        </div>
+        <aside class="block-info" id="blockInfo">
+          <h3 id="blockTitle">Оберіть блок</h3>
+          <p id="blockDesc" class="muted">Натисніть на будь-який блок у 3D-сцені,
+             щоб побачити його опис тут.</p>
+          <div id="blockMeta" class="block-meta"></div>
+          <div class="legend" id="legend"></div>
+        </aside>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Дипломна робота · класифікація вуличних фотографій за містом ·
+       StreetCLIP / EfficientNet-B2 / GeoCLIP</p>
+  </footer>
+
+  <script src="/static/js/vendor/three.min.js"></script>
+  <script src="/static/js/vendor/OrbitControls.js"></script>
+  <script src="/static/js/anatomy-data.js"></script>
+  <script src="/static/js/anatomy.js"></script>
+  <script src="/static/js/app.js"></script>
+</body>
+</html>
