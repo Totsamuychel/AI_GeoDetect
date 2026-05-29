@@ -97,6 +97,18 @@
       });
     }
 
+    // Escape key to exit fullscreen
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && host.classList.contains('fullscreen')) {
+        host.classList.remove('fullscreen');
+        if (fsBtn) {
+          fsBtn.innerHTML = '⛶';
+          fsBtn.title = 'На весь екран';
+        }
+        onResize();
+      }
+    });
+
     window.addEventListener('resize', onResize);
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(host);
 
