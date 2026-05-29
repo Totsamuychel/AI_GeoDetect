@@ -1,0 +1,35 @@
+{
+  "checkpoint_path": "checkpoints/geoclip/best_model.pth",
+  "architecture": "geoclip",
+  "num_classes": 3,
+  "num_test_samples": 1000,
+  "top1_accuracy": 0.906,
+  "macro_f1": 0.9069419823036432,
+  "balanced_accuracy": 0.9052727877578177,
+  "mean_distance_km": 53.09330898435299,
+  "median_distance_km": 4.501500095681134,
+  "p25_distance_km": 2.163450389488296,
+  "p75_distance_km": 7.517139613753294,
+  "p90_distance_km": 13.6894826122409,
+  "fraction_within_25km": 0.906,
+  "fraction_within_200km": 0.906,
+  "fraction_within_750km": 1.0,
+  "mean_geoscore": 4847.892966751127,
+  "median_geoscore": 4984.94433115529,
+  "per_class_accuracy": {
+    "budapest": {
+      "accuracy": 1.0,
+      "count": 354
+    },
+    "prague": {
+      "accuracy": 0.9583333333333334,
+      "count": 312
+    },
+    "warsaw": {
+      "accuracy": 0.7574850299401198,
+      "count": 334
+    }
+  },
+  "val_loss_from_ckpt": 0.7673956376065607,
+  "val_acc_from_ckpt": 0.9345870614051819
+}
