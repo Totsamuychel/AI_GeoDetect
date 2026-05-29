@@ -5,7 +5,7 @@
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
 manifest_path:      "dataset/manifests/train.csv"   # + сусідні val.csv/test.csv
-image_root:         "dataset"
+image_root:         "dataset_fast"   # зменшені до 384px (scripts/preprocess_resize.py)
 countries:          ["PL", "CZ", "HU"]
 quality_threshold:  0.0
 split_method:       "prebuilt"    # готові спліти (scripts/06_…); без витоку
@@ -28,7 +28,7 @@ stage2_unfreeze_n:  3             # кількість блоків EfficientNet
 # ── Оптимізатор / регуляризація ──────────────────────────────────────────────
 weight_decay:       0.01
 batch_size:         64           # 5090 32GB: EfficientNet-B2 @260px
-num_workers:        8
+num_workers:        12           # 16-ядерний CPU
 grad_clip:          1.0
 
 # ── Early stopping ───────────────────────────────────────────────────────────
@@ -50,3 +50,4 @@ save_top_k:         3
 # ── Відтворюваність ──────────────────────────────────────────────────────────
 seed:               42
 mixed_precision:    true
+cudnn_benchmark:    true

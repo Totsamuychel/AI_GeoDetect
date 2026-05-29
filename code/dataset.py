@@ -234,8 +234,9 @@ class GeoDataset(Dataset):
             quality_threshold=quality_threshold,
         )
 
-        # Вибірка підмножини
+        # Вибірка підмножини (приймаємо як pd.Index, так і list/array)
         if subset_indices is not None:
+            subset_indices = pd.Index(subset_indices)
             valid_indices = subset_indices[subset_indices.isin(self.df.index)]
             self.df = self.df.loc[valid_indices]
 
@@ -497,6 +498,7 @@ def create_dataloaders(
     batch_size: int = 32,
     num_workers: int = 4,
     pin_memory: bool = True,
+    prefetch_factor: int = 4,
     seed: int = 42,
 ) -> dict[str, DataLoader]:
     """
@@ -530,6 +532,12 @@ def create_dataloaders(
         val_transform = get_val_transforms()
 
     def _make_loader(ds: GeoDataset, shuffle: bool) -> DataLoader:
+        # prefetch_factor валідний лише при num_workers>0; більший буфер
+        # (4 батчі/воркер) краще ховає затримки декодування за GPU-обчисленням.
+        kw = {}
+        if num_workers > 0:
+            kw["prefetch_factor"] = prefetch_factor
+            kw["persistent_workers"] = True
         return DataLoader(
             ds,
             batch_size=batch_size,
@@ -537,7 +545,7 @@ def create_dataloaders(
             num_workers=num_workers,
             pin_memory=pin_memory and torch.cuda.is_available(),
             drop_last=shuffle,  # drop_last лише для тренування
-            persistent_workers=num_workers > 0,
+            **kw,
         )
 
     # ── Готові (pre-built) маніфести: train.csv + сусідні val.csv/test.csv ──

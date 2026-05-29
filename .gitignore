@@ -59,6 +59,13 @@ diploma_dataset.tar.gz
 diploma_code.zip
 runpod_upload/
 
+# ── Preprocessed (resized) images — regenerable via preprocess_resize.py ─────
+dataset_fast/
+
+# ── Training logs & temp samples (transient) ─────────────────────────────────
+logs/
+cache/
+
 # ── Auto-generated per-source manifests (regenerable from raw images) ────────
 dataset/raw/mapillary/manifest.csv
 dataset/raw/mapillary/*/manifest.csv

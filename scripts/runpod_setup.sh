@@ -78,6 +78,12 @@ if missing:
 print("[OK] 50/50 sample images found")
 PY
 
+echo "==> Pre-resize images (dataset → dataset_fast, 384px) for fast data loading"
+# Конфіги вказують image_root=dataset_fast; без цього кроку навчання не знайде зображень.
+python scripts/preprocess_resize.py --workers "$(nproc)" || {
+    echo "[ERROR] resize failed"; exit 1;
+}
+
 echo "==> Pre-download HuggingFace models (avoids timeout during training)"
 python - <<'PY'
 from transformers import CLIPModel, CLIPProcessor

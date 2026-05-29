@@ -107,6 +107,8 @@ class TrainConfig:
     # Відтворюваність
     seed:              int   = 42
     mixed_precision:   bool  = True
+    cudnn_benchmark:   bool  = False  # True = швидше при фіксованому розмірі входу
+    prefetch_factor:   int   = 4      # буфер DataLoader на воркер
 
     def __post_init__(self) -> None:
         # Not a dataclass field → excluded from asdict / checkpoint serialisation.
@@ -601,6 +603,13 @@ def train(config: TrainConfig) -> nn.Module:
         Навчена модель PyTorch.
     """
     seed_everything(config.seed)
+    # cudnn.benchmark підбирає найшвидші згорткові ядра для фіксованого розміру
+    # входу (усі зображення 224/260px) — суттєво швидше, ціною повної
+    # детермінованості. Вмикаємо опційно після seed_everything.
+    if config.cudnn_benchmark:
+        torch.backends.cudnn.benchmark = True
+        torch.backends.cudnn.deterministic = False
+        logger.info("cudnn.benchmark=True (швидше, не повністю детерміновано)")
     device = get_device()
 
     # ── Дані ─────────────────────────────────────────────────────────────────
@@ -625,6 +634,7 @@ def train(config: TrainConfig) -> nn.Module:
         val_frac=config.val_frac,
         batch_size=config.batch_size,
         num_workers=n_workers,
+        prefetch_factor=config.prefetch_factor,
         seed=config.seed,
     )
     num_classes  = dataloaders["num_classes"]
@@ -636,11 +646,16 @@ def train(config: TrainConfig) -> nn.Module:
 
     # ── Модель ───────────────────────────────────────────────────────────────
     logger.info(f"Ініціалізація архітектури: {config.architecture}")
+    # freeze_backbone приймає лише BaselineCNN; StreetCLIP/GeoCLIP заморожують
+    # backbone за замовчуванням (freeze_vision / freeze_clip) і не мають цього аргументу.
+    build_kwargs = {}
+    if config.architecture == "baseline":
+        build_kwargs["freeze_backbone"] = True
     model = build_model(
         architecture=config.architecture,
         num_classes=num_classes,
         pretrained=config.pretrained,
-        freeze_backbone=(config.architecture == "baseline"),
+        **build_kwargs,
     )
     model = model.to(device)
 

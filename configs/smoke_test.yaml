@@ -2,7 +2,7 @@
 # Запуск: conda run -n visomaster python code/train.py --config configs/smoke_test.yaml
 
 manifest_path:      "dataset/manifests/train.csv"
-image_root:         "dataset"
+image_root:         "dataset_fast"   # зменшені до 384px (scripts/preprocess_resize.py)
 countries:
   - "PL"
   - "CZ"
@@ -25,7 +25,7 @@ stage2_unfreeze_n:  0
 
 weight_decay:       0.01
 batch_size:         32
-num_workers:        2
+num_workers:        12
 grad_clip:          1.0
 contrastive_loss_weight: 0.1
 
@@ -40,3 +40,4 @@ save_top_k:         1
 
 seed:               42
 mixed_precision:    true
+cudnn_benchmark:    true

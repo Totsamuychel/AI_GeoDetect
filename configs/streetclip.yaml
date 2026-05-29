@@ -5,11 +5,11 @@
 
 # ── Дані ─────────────────────────────────────────────────────────────────────
 manifest_path:      "dataset/manifests/train.csv"   # + сусідні val.csv/test.csv
-image_root:         "dataset"
+image_root:         "dataset"        # оригінали: ViT-L compute-bound, @336 потребує деталей
 countries:          ["PL", "CZ", "HU"]
 quality_threshold:  0.0
 split_method:       "prebuilt"    # готові спліти (scripts/06_…); без витоку
-img_size:           224            # StreetCLIP / CLIP ViT очікує 224px
+img_size:           336            # geolocal/StreetCLIP = CLIP ViT-L/14@336px
 
 # ── Архітектура ──────────────────────────────────────────────────────────────
 architecture:       "streetclip"
@@ -27,8 +27,8 @@ stage2_unfreeze_n:  2                # кількість ViT encoder layers д�
 
 # ── Оптимізатор / регуляризація ──────────────────────────────────────────────
 weight_decay:       0.01
-batch_size:         64           # 5090 32GB: ViT-L/14 @224px, bf16
-num_workers:        8
+batch_size:         16           # 3090 24GB: ViT-L/14 @336px, bf16
+num_workers:        12           # 16-ядерний CPU
 grad_clip:          1.0
 
 # ── Early stopping ───────────────────────────────────────────────────────────
@@ -45,8 +45,9 @@ experiment_name:    "geolocation-streetclip"
 
 # ── Збереження ───────────────────────────────────────────────────────────────
 checkpoint_dir:     "checkpoints/streetclip"
-save_top_k:         3
+save_top_k:         1            # ViT-L чекпоінт ~1.2GB — економимо диск
 
 # ── Відтворюваність ──────────────────────────────────────────────────────────
 seed:               42
 mixed_precision:    true
+cudnn_benchmark:    true
