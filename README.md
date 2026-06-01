@@ -20,7 +20,7 @@ This is a diploma thesis project focused on developing and comparing neural netw
 | `StreetCLIP` | CLIP (ViT-L/14) | Fine-tuning with text prompts |
 | `GeoCLIP` | CLIP + GPS encoder | Contrastive learning with GPS gallery |
 
-**Target regions:** Ukraine (Kyiv, Lviv, Odesa, Kharkiv, Dnipro) and neighboring countries — Poland, Czech Republic, Hungary, Austria, Romania, Slovakia.
+**Target cities:** Kyiv (Ukraine) and the Central European capitals — Warsaw (Poland), Prague (Czech Republic), Budapest (Hungary).
 
 ---
 
@@ -152,7 +152,7 @@ The script supports Mapillary API and local photo directories as sources.
 # Download images for specified cities via Mapillary API
 python code/download_data.py \
     --source mapillary \
-    --cities Kyiv Lviv Odesa Kharkiv Dnipro Warsaw Prague Budapest \
+    --cities Kyiv Warsaw Prague Budapest \
     --output data/images/ \
     --max-per-city 5000 \
     --mapillary-token YOUR_TOKEN

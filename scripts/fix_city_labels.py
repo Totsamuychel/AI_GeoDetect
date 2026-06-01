@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Целевые города для диплома
 TARGET_CITIES = {
-    "UA": ["Kyiv", "Lviv", "Odesa", "Kharkiv", "Dnipro"],
+    "UA": ["Kyiv"],
     "PL": ["Warsaw", "Kraków", "Gdańsk"],
     "CZ": ["Prague"],
     "HU": ["Budapest"],
@@ -144,14 +144,6 @@ def normalize_city_name(city: str, country: str) -> str:
         "Київ": "Kyiv",
         "Kijów": "Kyiv",
         "Kiev": "Kyiv",
-        "Львів": "Lviv",
-        "Lwów": "Lviv",
-        "Одеса": "Odesa",
-        "Odessa": "Odesa",
-        "Харків": "Kharkiv",
-        "Kharkov": "Kharkiv",
-        "Дніпро": "Dnipro",
-        "Dnipropetrovsk": "Dnipro",
 
         # Poland
         "Warszawa": "Warsaw",

@@ -6,17 +6,14 @@ fast_download_mapillary.py — Быстрое скачивание уличны�
 качает фото параллельно (16 воркеров).  Поддерживает resume.
 
 Запуск:
-    # Все крупные города Украины (~5000 фото, ~30 мин)
-    python code/fast_download_mapillary.py --preset ukraine-cities --max-per-city 1000
+    # Целевые города проекта (Київ, Варшава, Прага, Будапешт)
+    python code/fast_download_mapillary.py --preset target-cities --max-per-city 5000
 
     # Один город по bbox
     python code/fast_download_mapillary.py \
         --bbox 50.35 30.25 50.55 30.75 \
         --name kyiv \
         --max-images 2000
-
-    # Несколько городов вручную
-    python code/fast_download_mapillary.py --preset ukraine-all --max-per-city 500
 """
 
 from __future__ import annotations
@@ -47,7 +44,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Preset bbox-ы для городов Украины
+# Bbox-ы целевых городов проекта (Київ, Варшава, Прага, Будапешт)
 # Format: (min_lat, min_lon, max_lat, max_lon)
 # ──────────────────────────────────────────────────────────────────────────────
 
@@ -55,33 +52,11 @@ CITY_BBOXES: dict[str, tuple[float, float, float, float]] = {
     "kyiv":        (50.35, 30.25, 50.55, 30.75),
     "warsaw":      (52.10, 20.85, 52.35, 21.15),
     "prague":      (49.95, 14.25, 50.15, 14.65),
-    "lviv":        (49.78, 23.92, 49.88, 24.12),
-    "odesa":       (46.38, 30.62, 46.55, 30.82),
-    "kharkiv":     (49.90, 36.15, 50.10, 36.40),
-    "dnipro":      (48.38, 34.90, 48.55, 35.15),
-    "zaporizhzhia":(47.80, 35.10, 47.90, 35.25),
-    "vinnytsia":   (49.20, 28.43, 49.28, 28.53),
-    "poltava":     (49.56, 34.52, 49.62, 34.60),
-    "chernihiv":   (51.47, 31.25, 51.52, 31.32),
-    "ivano-frankivsk": (48.90, 24.68, 48.95, 24.74),
-    "ternopil":    (49.54, 25.57, 49.58, 25.63),
-    "uzhhorod":    (48.60, 22.27, 48.65, 22.33),
-    "lutsk":       (50.73, 25.30, 50.78, 25.38),
-    "rivne":       (50.60, 26.22, 50.65, 26.28),
-    "sumy":        (50.89, 34.76, 50.93, 34.82),
-    "zhytomyr":    (50.24, 28.64, 50.28, 28.70),
-    "cherkasy":    (49.42, 32.04, 49.47, 32.10),
-    "kropyvnytskyi": (48.49, 32.24, 48.53, 32.30),
-    "mykolaiv":    (46.95, 31.96, 47.00, 32.05),
-    "kherson":     (46.62, 32.58, 46.67, 32.65),
+    "budapest":    (47.43, 18.95, 47.58, 19.15),
 }
 
 PRESETS = {
-    "target-cities": ["kyiv", "warsaw", "prague"],
-    "ukraine-cities": [
-        "kyiv", "lviv", "odesa", "kharkiv", "dnipro",
-    ],
-    "ukraine-all": list(CITY_BBOXES.keys()),
+    "target-cities": ["kyiv", "warsaw", "prague", "budapest"],
 }
 
 MAPILLARY_GRAPH_URL = "https://graph.mapillary.com"
@@ -316,12 +291,12 @@ def download_city(
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description="Быстрое скачивание уличных фото Украины из Mapillary",
+        description="Быстрое скачивание уличных фото из Mapillary",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument(
         "--preset", choices=list(PRESETS.keys()),
-        help="Preset набор городов (ukraine-cities = 5 городов, ukraine-all = 20 городов)",
+        help="Preset набор городов (target-cities = Київ, Варшава, Прага, Будапешт)",
     )
     p.add_argument(
         "--bbox", nargs=4, type=float,
@@ -379,7 +354,7 @@ def main():
 
     else:
         log.error("Укажи --preset или --bbox! Пример:")
-        log.error("  python code/fast_download_mapillary.py --preset ukraine-cities")
+        log.error("  python code/fast_download_mapillary.py --preset target-cities")
         sys.exit(1)
 
     log.info(f"\n{'='*60}")
