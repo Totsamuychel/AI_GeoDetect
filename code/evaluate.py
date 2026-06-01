@@ -91,11 +91,18 @@ def load_checkpoint(
     if num_classes == 0:
         raise ValueError("Чекпоінт не містить class_names")
 
+    def _as_float(x: object) -> float:
+        """None/нечислові значення → nan, щоб :.4f не падав з TypeError."""
+        try:
+            return float(x)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return float("nan")
+
     logger.info(
         f"Завантаження чекпоінту: {path.name} | "
         f"arch={architecture}, epoch={checkpoint.get('epoch', '?')}, "
-        f"val_loss={checkpoint.get('val_loss', float('nan')):.4f}, "
-        f"val_acc={checkpoint.get('val_acc', float('nan')):.4f}"
+        f"val_loss={_as_float(checkpoint.get('val_loss')):.4f}, "
+        f"val_acc={_as_float(checkpoint.get('val_acc')):.4f}"
     )
 
     model = build_model(
@@ -151,6 +158,10 @@ class EvalResult:
 
     # Per-class
     per_class_accuracy: dict
+
+    # Top-K (None, якщо k >= num_classes — тоді метрика тривіально = 1.0)
+    top3_accuracy:      Optional[float] = None
+    top5_accuracy:      Optional[float] = None
 
     # Метаінформація
     val_loss_from_ckpt: Optional[float] = None
@@ -318,6 +329,10 @@ def evaluate(
     logger.info("Обчислення метрик...")
 
     top1 = top_k_accuracy(all_logits, all_labels, k=1)
+    # Top-K інформативний лише коли k < num_classes; інакше метрика тривіально
+    # дорівнює 1.0 (а numpy top_k_accuracy не обмежує k і теж поверне 1.0).
+    top3 = top_k_accuracy(all_logits, all_labels, k=3) if num_classes > 3 else None
+    top5 = top_k_accuracy(all_logits, all_labels, k=5) if num_classes > 5 else None
     mf1  = macro_f1(all_logits, all_labels)
     bacc = balanced_accuracy(all_logits, all_labels)
 
@@ -345,12 +360,16 @@ def evaluate(
         all_logits.numpy(), all_labels.numpy(), class_names
     )
 
+    top3_str = f"{top3*100:.2f}%" if top3 is not None else "n/a (k≥класів)"
+    top5_str = f"{top5*100:.2f}%" if top5 is not None else "n/a (k≥класів)"
     logger.info(
         f"\n{'='*55}\n"
         f"РЕЗУЛЬТАТИ ОЦІНКИ\n"
         f"{'='*55}\n"
         f"  Тестовий набір:         {len(test_dataset)} зображень\n"
         f"  Top-1 Accuracy:         {top1*100:.2f}%\n"
+        f"  Top-3 Accuracy:         {top3_str}\n"
+        f"  Top-5 Accuracy:         {top5_str}\n"
         f"  Macro-F1:               {mf1*100:.2f}%\n"
         f"  Balanced Accuracy:      {bacc*100:.2f}%\n"
         f"  Mean Distance:          {mean_dist:.1f} км\n"
@@ -381,6 +400,8 @@ def evaluate(
         top1_accuracy=top1,
         macro_f1=mf1,
         balanced_accuracy=bacc,
+        top3_accuracy=top3,
+        top5_accuracy=top5,
         mean_distance_km=mean_dist,
         median_distance_km=median_dist,
         p25_distance_km=p25_dist,

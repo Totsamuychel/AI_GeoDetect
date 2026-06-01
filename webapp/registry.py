@@ -3,7 +3,7 @@ registry.py — Реєстр моделей для веб-демо геолок�
 
 Ліниво завантажує три навчені моделі (baseline / streetclip / geoclip),
 виконує інференс одного зображення та визначає, чи належить фото до одного
-з трьох міст (Варшава / Прага / Будапешт), чи є поза-розподільним (OOD).
+з чотирьох міст (Київ / Варшава / Прага / Будапешт), чи є поза-розподільним (OOD).
 
 OOD-детекція: гейт на основі косинусної подібності до прототипів класів
 в embedding-просторі моделі, відкалібрований на TRAIN-наборі (без витоку
@@ -51,41 +51,46 @@ CACHE_DIR.mkdir(exist_ok=True)
 # Кожна модель: шлях до чекпоінту, рідний розмір входу (як при навчанні).
 MODELS: dict[str, dict] = {
     "streetclip": {
-        "checkpoint": ROOT / "checkpoints/streetclip/best_model.pth",
+        "checkpoint": ROOT / "checkpoints/streetclip_v2/best_model.pth",
         "img_size":   336,
         "label":      "StreetCLIP",
         "subtitle":   "CLIP ViT-L/14@336 + лінійний пробник",
-        "accuracy":   "96.9%",
+        "accuracy":   "89.4%",
     },
     "baseline": {
-        "checkpoint": ROOT / "checkpoints/baseline/best_model.pth",
+        "checkpoint": ROOT / "checkpoints/baseline_v2/best_model.pth",
         "img_size":   260,
         "label":      "Baseline CNN",
         "subtitle":   "EfficientNet-B2",
-        "accuracy":   "91.8%",
+        "accuracy":   "71.5%",
     },
     "geoclip": {
-        "checkpoint": ROOT / "checkpoints/geoclip/best_model.pth",
+        "checkpoint": ROOT / "checkpoints/geoclip_v2/best_model.pth",
         "img_size":   224,
         "label":      "GeoCLIP",
         "subtitle":   "CLIP ViT-B/32 + GPS-енкодер",
-        "accuracy":   "90.6%",
+        "accuracy":   "83.8%",
     },
 }
 
 # Українські назви та координати центрів міст (ключі lowercase = class_names).
 CITY_INFO: dict[str, dict] = {
+    "kyiv":     {"ua": "Київ",     "country": "Україна",  "lat": 50.4501, "lon": 30.5234},
     "warsaw":   {"ua": "Варшава",  "country": "Польща",   "lat": 52.2297, "lon": 21.0122},
     "prague":   {"ua": "Прага",    "country": "Чехія",    "lat": 50.0755, "lon": 14.4378},
     "budapest": {"ua": "Будапешт", "country": "Угорщина", "lat": 47.4979, "lon": 19.0402},
 }
 
 # Скільки фото на місто брати для калібрування OOD-прототипів.
-OOD_SAMPLES_PER_CITY = 200
+OOD_SAMPLES_PER_CITY = 300
 # Перцентиль in-distribution подібностей як поріг (нижче → OOD).
-# 5 = відсікаємо ~5% найнетиповіших справжніх фото міст заради надійнішого
-# відсіювання поза-розподільних знімків.
-OOD_PERCENTILE = 5.0
+# 1 = відсікаємо лише ~1% найнетиповіших справжніх фото — це майже не дає
+# хибних спрацювань на справжніх фото міст (зокрема туристичних/нетипових
+# ракурсів), але все одно відсіює явно чужі знімки.
+OOD_PERCENTILE = 1.0
+# Додатковий запас: поріг ще трохи знижуємо, щоб справжні фото міст, які
+# відрізняються від «вуличного» розподілу навчання, не позначались як OOD.
+OOD_MARGIN = 0.90
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -190,7 +195,7 @@ class ModelRegistry:
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Не вдалося прочитати OOD-кеш {cache_file}: {e}")
 
-        manifest = ROOT / "dataset/manifests/train.csv"
+        manifest = ROOT / "dataset/manifests_sv/train.csv"
         if not manifest.exists():
             logger.warning(
                 f"TRAIN-маніфест відсутній — OOD-гейт для «{lm.arch}» вимкнено "
@@ -214,7 +219,12 @@ class ModelRegistry:
             sub = sub.head(OOD_SAMPLES_PER_CITY)
             batch, paths = [], []
             for _, row in sub.iterrows():
-                p = ROOT / "dataset" / str(row["filepath"])
+                # filepath у v2-маніфесті відносний до кореня проєкту
+                # (data/images/...), у старих — відносний до dataset/.
+                fp = str(row["filepath"])
+                p = ROOT / fp
+                if not p.exists():
+                    p = ROOT / "dataset" / fp
                 if not p.exists():
                     continue
                 try:
@@ -254,7 +264,7 @@ class ModelRegistry:
             sims = arr @ protos_np[idx_of[c]]  # (n,)
             all_own_sims.extend(sims.tolist())
 
-        sim_threshold = float(np.percentile(all_own_sims, OOD_PERCENTILE))
+        sim_threshold = float(np.percentile(all_own_sims, OOD_PERCENTILE)) * OOD_MARGIN
         lm.prototypes = torch.tensor(protos_np, dtype=torch.float32, device=self.device)
         lm.sim_threshold = sim_threshold
 

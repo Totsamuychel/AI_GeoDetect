@@ -20,6 +20,11 @@
   let explodedGroup = null;
   let explodingMeshes = [];
 
+  // Forward-pass анімація: упорядкований шлях потоку, «імпульси» та стан
+  let mainFlow = [], gpsFlow = [];
+  let pulseMesh = null, gpsPulseMesh = null;
+  let flowState = { active: false, lanes: [], holdFrames: 0 };
+
   // ── Текстова мітка над блоком (sprite) ─────────────────────────────────
   function makeLabel(text, fontSize = 44) {
     const pad = 24;
@@ -93,6 +98,7 @@
         const isFS = host.classList.contains('fullscreen');
         fsBtn.innerHTML = isFS ? '✕' : '⛶';
         fsBtn.title = isFS ? 'Закрити' : 'На весь екран';
+        if (!isFS) stopFlow(); // Зупиняємо forward-pass при ВИХОДІ з повноекранного режиму
         onResize();
       });
     }
@@ -105,9 +111,27 @@
           fsBtn.innerHTML = '⛶';
           fsBtn.title = 'На весь екран';
         }
+        stopFlow();
         onResize();
       }
     });
+
+    // Кнопка запуску forward-pass + HUD з формою тензора
+    const playBtn = document.createElement('button');
+    playBtn.id = 'playFlowBtn';
+    playBtn.className = 'flow-btn';
+    playBtn.innerHTML = '▶ Запустити прохід';
+    playBtn.title = 'Показати, як дані проходять крізь мережу';
+    host.appendChild(playBtn);
+    playBtn.addEventListener('click', () => {
+      if (flowState && flowState.active) stopFlow();
+      else startFlow();
+    });
+
+    const hud = document.createElement('div');
+    hud.id = 'flowHud';
+    hud.className = 'flow-hud';
+    host.appendChild(hud);
 
     window.addEventListener('resize', onResize);
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(host);
@@ -127,6 +151,8 @@
     modelGroup = new THREE.Group();
     blockMeshes = []; selectedMesh = null;
     clearExplosion(); // Скидаємо розпад при зміні моделі
+    resetFlowState();  // Скидаємо forward-pass анімацію
+    mainFlow = []; gpsFlow = [];
 
     const data = ANATOMY[key];
     const mainBlocks = data.blocks.filter(b => b.branch !== 'gps');
@@ -143,6 +169,7 @@
       addBlock(b, cx, 0, 0, bw);
       centersMap[b.id] = new THREE.Vector3(cx, 0, 0);
       centers.push({ x1: x, x2: x + bw, cx, id: b.id });
+      mainFlow.push({ id: b.id, block: b, pos: new THREE.Vector3(cx, 0, 0) });
       x += bw + GAP;
     });
     // Стрілки між блоками головного потоку
@@ -162,6 +189,7 @@
         addBlock(b, cx, 0, Z, bw);
         centersMap[b.id] = new THREE.Vector3(cx, 0, Z);
         gc.push({ x1: gx, x2: gx + bw, cx, id: b.id });
+        gpsFlow.push({ id: b.id, block: b, pos: new THREE.Vector3(cx, 0, Z) });
         gx += bw + GAP;
       });
       for (let i = 0; i < gc.length - 1; i++) addArrow(gc[i].x2, gc[i + 1].x1, 0, Z, 0xb07cff);
@@ -184,6 +212,7 @@
     });
 
     scene.add(modelGroup);
+    createPulses(); // «Імпульси» для forward-pass (після побудови modelGroup)
     document.getElementById('anatomyTabs') && updateSummary(data);
     autoFrame();
   }
@@ -389,6 +418,124 @@
     showInfo(b);
   }
 
+  // ── FORWARD-PASS: анімація проходження даних крізь мережу ───────────────
+  function clearLights() {
+    blockMeshes.forEach(m => { m.material.emissiveIntensity = m.userData.baseEmissive; });
+  }
+
+  function lightBlock(blockId, on) {
+    blockMeshes.forEach(m => {
+      if (m.userData.block.id === blockId) {
+        m.material.emissiveIntensity = on ? 0.85 : m.userData.baseEmissive;
+      }
+    });
+  }
+
+  function makePulse(color) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 20, 20),
+      new THREE.MeshBasicMaterial({ color })
+    ));
+    g.add(new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 20, 20),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })
+    ));
+    g.visible = false;
+    modelGroup.add(g);
+    return g;
+  }
+
+  function createPulses() {
+    pulseMesh = makePulse(0x7be0ff);
+    gpsPulseMesh = gpsFlow.length ? makePulse(0xc79bff) : null;
+  }
+
+  // Повне скидання стану (при перебудові моделі — старі pulse вже знищено разом з групою)
+  function resetFlowState() {
+    flowState = { active: false, lanes: [], holdFrames: 0 };
+    pulseMesh = null;
+    gpsPulseMesh = null;
+    const btn = document.getElementById('playFlowBtn');
+    if (btn) btn.innerHTML = '▶ Запустити прохід';
+    const hud = document.getElementById('flowHud');
+    if (hud) hud.classList.remove('show');
+  }
+
+  function setHud(block) {
+    const hud = document.getElementById('flowHud');
+    if (!hud) return;
+    hud.innerHTML = `${block.title} · <b>${block.shape || ''}</b>`;
+    hud.classList.add('show');
+  }
+
+  function startFlow() {
+    if (!mainFlow.length || !pulseMesh) return;
+
+    // Прибираємо ручне виділення та розпад, щоб не конфліктували з підсвіткою
+    clearExplosion();
+    if (selectedMesh) {
+      blockMeshes.forEach(m => { if (m.userData === selectedMesh.userData) m.scale.set(1, 1, 1); });
+      selectedMesh = null;
+    }
+    clearLights();
+    controls.autoRotate = false;
+
+    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: true }];
+    if (gpsFlow.length && gpsPulseMesh) {
+      lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: false });
+    }
+    lanes.forEach(lane => {
+      lane.pulse.visible = true;
+      lane.pulse.position.copy(lane.path[0].pos);
+      lightBlock(lane.path[0].id, true);
+      if (lane.primary) { showInfo(lane.path[0].block); setHud(lane.path[0].block); }
+    });
+    flowState = { active: true, lanes, holdFrames: 0 };
+
+    const btn = document.getElementById('playFlowBtn');
+    if (btn) btn.innerHTML = '⏸ Зупинити';
+  }
+
+  function stopFlow() {
+    if (pulseMesh) pulseMesh.visible = false;
+    if (gpsPulseMesh) gpsPulseMesh.visible = false;
+    clearLights();
+    if (flowState) { flowState.active = false; flowState.lanes = []; }
+    const btn = document.getElementById('playFlowBtn');
+    if (btn) btn.innerHTML = '▶ Запустити прохід';
+    const hud = document.getElementById('flowHud');
+    if (hud) hud.classList.remove('show');
+  }
+
+  function updateFlows() {
+    if (!flowState || !flowState.active) return;
+    let allDone = true;
+    flowState.lanes.forEach(lane => {
+      const path = lane.path;
+      if (!lane.done) {
+        allDone = false;
+        lane.t += lane.speed;
+        if (lane.t >= 1) {
+          lane.t = 0;
+          lane.seg++;
+          const node = path[lane.seg];
+          lightBlock(node.id, true);
+          if (lane.primary) { showInfo(node.block); setHud(node.block); }
+          if (lane.seg >= path.length - 1) lane.done = true;
+        }
+      }
+      const i = Math.min(lane.seg, path.length - 1);
+      const j = Math.min(lane.seg + 1, path.length - 1);
+      lane.pulse.position.lerpVectors(path[i].pos, path[j].pos, lane.t);
+    });
+
+    if (allDone) {
+      flowState.holdFrames++;
+      if (flowState.holdFrames > 70) stopFlow(); // ~1.2 с фінального підсвічування Softmax
+    }
+  }
+
   // ── Легенда + резюме ──────────────────────────────────────────────────
   function buildLegend() {
     const el = document.getElementById('legend');
@@ -430,6 +577,8 @@
         }
       });
     }
+
+    updateFlows(); // Рух «імпульсів» forward-pass
 
     renderer.render(scene, camera);
   }

@@ -3,7 +3,7 @@
    ============================================================================ */
 
 (function () {
-  const CITY_COLORS = { warsaw: '#ff6b6b', prague: '#ffd166', budapest: '#4ecdc4' };
+  const CITY_COLORS = { kyiv: '#a78bfa', warsaw: '#ff6b6b', prague: '#ffd166', budapest: '#4ecdc4' };
 
   const fileInput   = document.getElementById('fileInput');
   const dropzone    = document.getElementById('dropzone');
@@ -112,12 +112,29 @@
       body: JSON.stringify({ model: selectedModel, image: imageDataUrl }),
     })
       .then(async r => {
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || 'Помилка сервера');
+        const text = await r.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          throw new Error('Некоректна відповідь сервера (HTTP ' + r.status + '). ' +
+                          'Переконайтеся, що сервер запущено.');
+        }
+        if (!r.ok) throw new Error(data.error || ('Помилка сервера (HTTP ' + r.status + ').'));
         return data;
       })
-      .then(renderResult)
-      .catch(err => showError(err.message))
+      .then(data => {
+        try {
+          renderResult(data);
+        } catch (e) {
+          console.error('renderResult failed:', e, data);
+          showError('Не вдалося відобразити результат: ' + e.message);
+        }
+      })
+      .catch(err => {
+        console.error('Помилка передбачення:', err);
+        showError(err.message || 'Невідома помилка');
+      })
       .finally(() => setLoading(false));
   });
 
@@ -125,6 +142,18 @@
     predictBtn.disabled = on || !(imageDataUrl && selectedModel);
     spinner.hidden = !on;
     btnText.textContent = on ? 'Обробка…' : 'Визначити місто';
+    // Одразу показуємо панель результату з індикатором, щоб клік не виглядав «мертвим».
+    if (on) {
+      placeholder.hidden = true;
+      resultBox.hidden = false;
+      oodBanner.hidden = true;
+      verdict.innerHTML =
+        '<span class="loading-note">⏳ Аналізуємо фото… Перший запуск кожної моделі ' +
+        'може зайняти до хвилини (завантаження ваг і калібрування). Зачекайте, будь ласка.</span>';
+      bars.innerHTML = '';
+      miniMap.innerHTML = '';
+      modelMeta.textContent = '';
+    }
   }
 
   function showError(msg) {
@@ -197,9 +226,10 @@
 
   function fmtSim(v) { return v == null ? '—' : v.toFixed(3); }
 
-  // ── Міні-карта Центральної Європи ──────────────────────────────────────
+  // ── Міні-карта (Центральна Європа + Київ) ──────────────────────────────
+  // Діапазон довготи розширено до 12°–32°E, щоб умістити Київ (30.5°E).
   function project(lat, lon) {
-    const x = 40 + ((lon - 12) / 11) * 240;
+    const x = 40 + ((lon - 12) / 20) * 240;
     const y = 30 + ((54 - lat) / 8) * 170;
     return [x, y];
   }
@@ -214,6 +244,7 @@
       svg += `<line x1="30" y1="${gy}" x2="290" y2="${gy}" stroke="#1b2438" stroke-width="1"/>`;
 
     const cities = {
+      kyiv:     { lat: 50.4501, lon: 30.5234, ua: 'Київ' },
       warsaw:   { lat: 52.2297, lon: 21.0122, ua: 'Варшава' },
       prague:   { lat: 50.0755, lon: 14.4378, ua: 'Прага' },
       budapest: { lat: 47.4979, lon: 19.0402, ua: 'Будапешт' },

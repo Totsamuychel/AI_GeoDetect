@@ -1,0 +1,53 @@
+# =============================================================================
+# streetclip_v2.yaml — Street View dataset (Kyiv + Warsaw + Prague + Budapest)
+# Архітектура: geolocal/StreetCLIP (CLIP ViT-L/14) + лінійний пробник (4 класи)
+# =============================================================================
+
+# ── Дані ─────────────────────────────────────────────────────────────────────
+manifest_path:      "dataset/manifests_sv/train.csv"   # + val.csv/test.csv поруч
+image_root:         "."            # filepath = data/images/<city>/...  (SV 640px)
+countries:          ["UA", "PL", "CZ", "HU"]
+quality_threshold:  0.0
+split_method:       "prebuilt"
+img_size:           336            # geolocal/StreetCLIP = CLIP ViT-L/14@336px
+
+# ── Архітектура ──────────────────────────────────────────────────────────────
+architecture:       "streetclip"
+pretrained:         true
+
+# ── Стадія 1: Лінійний пробник над замороженим CLIP ──────────────────────────
+stage1_epochs:      8
+stage1_lr:          0.0005
+stage1_unfreeze_n:  0
+
+# ── Стадія 2: Розморожування останніх ViT-шарів ──────────────────────────────
+stage2_epochs:      15
+stage2_lr:          0.00002
+stage2_unfreeze_n:  2
+
+# ── Оптимізатор / регуляризація ──────────────────────────────────────────────
+weight_decay:       0.01
+batch_size:         16
+num_workers:        12
+grad_clip:          1.0
+
+# ── Early stopping ───────────────────────────────────────────────────────────
+patience:           8
+min_delta:          0.0001
+
+# ── Логування ────────────────────────────────────────────────────────────────
+use_wandb:          false
+use_mlflow:         false
+wandb_project:      "ua-street-geolocation"
+wandb_run_name:     "streetclip-linearprobe-sv"
+mlflow_uri:         "mlruns"
+experiment_name:    "geolocation-streetclip-v2"
+
+# ── Збереження ───────────────────────────────────────────────────────────────
+checkpoint_dir:     "checkpoints/streetclip_v2"
+save_top_k:         1
+
+# ── Відтворюваність ──────────────────────────────────────────────────────────
+seed:               42
+mixed_precision:    true
+cudnn_benchmark:    true

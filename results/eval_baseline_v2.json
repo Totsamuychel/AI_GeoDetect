@@ -1,0 +1,41 @@
+{
+  "checkpoint_path": "checkpoints/baseline_v2/best_model.pth",
+  "architecture": "baseline",
+  "num_classes": 4,
+  "num_test_samples": 3716,
+  "top1_accuracy": 0.7144779332615716,
+  "macro_f1": 0.6774977163390806,
+  "balanced_accuracy": 0.6780390251520917,
+  "mean_distance_km": 194.63760885308727,
+  "median_distance_km": 8.569248454406925,
+  "p25_distance_km": 3.5801094669833216,
+  "p75_distance_km": 443.9538540290972,
+  "p90_distance_km": 686.9423419766476,
+  "fraction_within_25km": 0.7069429494079655,
+  "fraction_within_200km": 0.7144779332615716,
+  "fraction_within_750km": 0.9294940796555436,
+  "mean_geoscore": 4481.902062769091,
+  "median_geoscore": 4971.378380148911,
+  "per_class_accuracy": {
+    "budapest": {
+      "accuracy": 0.6702702702702703,
+      "count": 740
+    },
+    "kyiv": {
+      "accuracy": 0.8562834224598931,
+      "count": 1496
+    },
+    "prague": {
+      "accuracy": 0.5519125683060109,
+      "count": 732
+    },
+    "warsaw": {
+      "accuracy": 0.6336898395721925,
+      "count": 748
+    }
+  },
+  "top3_accuracy": 0.965016146393972,
+  "top5_accuracy": null,
+  "val_loss_from_ckpt": 0.9352685899546089,
+  "val_acc_from_ckpt": 0.7090957164764404
+}

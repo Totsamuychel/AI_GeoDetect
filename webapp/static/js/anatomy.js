@@ -20,6 +20,14 @@
   let explodedGroup = null;
   let explodingMeshes = [];
 
+  // Forward-pass анімація: упорядкований шлях потоку, «імпульси» та стан
+  let mainFlow = [], gpsFlow = [];
+  let pulseMesh = null, gpsPulseMesh = null;
+  let flowState = { active: false, lanes: [], holdFrames: 0 };
+  let walkIndex = -1;          // поточний крок «прогону» (головний потік)
+  let modalEl = null;          // модальне вікно детального опису блоку
+  let downX = 0, downY = 0;    // позиція натискання (для відрізнення кліку від обертання)
+
   // ── Текстова мітка над блоком (sprite) ─────────────────────────────────
   function makeLabel(text, fontSize = 44) {
     const pad = 24;
@@ -83,7 +91,7 @@
     raycaster = new THREE.Raycaster();
     pointer = new THREE.Vector2();
     renderer.domElement.addEventListener('pointerdown', onPick);
-    renderer.domElement.addEventListener('dblclick', onDoubleClick); // <--- ДОДАНО
+    renderer.domElement.addEventListener('pointerup', onPointerUp); // чистий клік → детальне вікно
 
     // Fullscreen toggle
     const fsBtn = document.getElementById('fullscreenBtn');
@@ -93,28 +101,62 @@
         const isFS = host.classList.contains('fullscreen');
         fsBtn.innerHTML = isFS ? '✕' : '⛶';
         fsBtn.title = isFS ? 'Закрити' : 'На весь екран';
+        if (!isFS) stopFlow(); // Зупиняємо forward-pass при ВИХОДІ з повноекранного режиму
         onResize();
       });
     }
 
-    // Escape key to exit fullscreen
+    // Клавіатура: Esc — закрити вікно / вийти з повного екрана; стрілки/пробіл — прогін
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && host.classList.contains('fullscreen')) {
-        host.classList.remove('fullscreen');
-        if (fsBtn) {
-          fsBtn.innerHTML = '⛶';
-          fsBtn.title = 'На весь екран';
+      if (e.key === 'Escape') {
+        if (modalEl && modalEl.classList.contains('open')) { closeModal(); return; }
+        if (host.classList.contains('fullscreen')) {
+          host.classList.remove('fullscreen');
+          if (fsBtn) { fsBtn.innerHTML = '⛶'; fsBtn.title = 'На весь екран'; }
+          stopFlow();
+          onResize();
         }
-        onResize();
+        return;
+      }
+      if (host.classList.contains('fullscreen') && !(modalEl && modalEl.classList.contains('open'))) {
+        if (e.key === 'ArrowRight') { e.preventDefault(); walkNext(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); walkPrev(); }
+        else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); walkToggle(); }
       }
     });
+
+    // ── Меню «Прогін роботи» (керування проходженням даних) ────────────────
+    const panel = document.createElement('div');
+    panel.className = 'walk-panel';
+    panel.innerHTML = `
+      <div class="walk-steps" id="walkSteps"></div>
+      <div class="walk-bar">
+        <button id="walkPrevBtn" class="walk-ctrl" title="Попередній крок (←)">◀</button>
+        <button id="walkPlayBtn" class="walk-ctrl walk-main" title="Запустити прогін (Пробіл)">▶ Прогін</button>
+        <button id="walkNextBtn" class="walk-ctrl" title="Наступний крок (→)">▶</button>
+        <div class="walk-info">
+          <div class="walk-progress"><div id="walkBar" class="walk-progress-fill"></div></div>
+          <div id="walkLabel" class="walk-label">Крок 0 / 0</div>
+        </div>
+      </div>`;
+    host.appendChild(panel);
+    document.getElementById('walkPrevBtn').addEventListener('click', walkPrev);
+    document.getElementById('walkNextBtn').addEventListener('click', walkNext);
+    document.getElementById('walkPlayBtn').addEventListener('click', walkToggle);
+
+    const hud = document.createElement('div');
+    hud.id = 'flowHud';
+    hud.className = 'flow-hud';
+    host.appendChild(hud);
+
+    buildModal(); // модальне вікно детального опису блоку
 
     window.addEventListener('resize', onResize);
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(host);
 
     // Додаємо підказку про подвійний клік
     const hintEl = document.querySelector('.canvas-hint');
-    if (hintEl) hintEl.innerHTML += ' · <b>Подвійний клік</b> — мікроархітектура';
+    if (hintEl) hintEl.innerHTML += ' · <b>Клік на блок</b> — детальне вікно';
 
     buildModel(currentKey);
     animate();
@@ -127,6 +169,8 @@
     modelGroup = new THREE.Group();
     blockMeshes = []; selectedMesh = null;
     clearExplosion(); // Скидаємо розпад при зміні моделі
+    resetFlowState();  // Скидаємо forward-pass анімацію
+    mainFlow = []; gpsFlow = [];
 
     const data = ANATOMY[key];
     const mainBlocks = data.blocks.filter(b => b.branch !== 'gps');
@@ -143,6 +187,7 @@
       addBlock(b, cx, 0, 0, bw);
       centersMap[b.id] = new THREE.Vector3(cx, 0, 0);
       centers.push({ x1: x, x2: x + bw, cx, id: b.id });
+      mainFlow.push({ id: b.id, block: b, pos: new THREE.Vector3(cx, 0, 0) });
       x += bw + GAP;
     });
     // Стрілки між блоками головного потоку
@@ -162,6 +207,7 @@
         addBlock(b, cx, 0, Z, bw);
         centersMap[b.id] = new THREE.Vector3(cx, 0, Z);
         gc.push({ x1: gx, x2: gx + bw, cx, id: b.id });
+        gpsFlow.push({ id: b.id, block: b, pos: new THREE.Vector3(cx, 0, Z) });
         gx += bw + GAP;
       });
       for (let i = 0; i < gc.length - 1; i++) addArrow(gc[i].x2, gc[i + 1].x1, 0, Z, 0xb07cff);
@@ -184,6 +230,9 @@
     });
 
     scene.add(modelGroup);
+    createPulses(); // «Імпульси» для forward-pass (після побудови modelGroup)
+    buildWalkSteps(); // список кроків для меню «Прогін»
+    resetWalk();
     document.getElementById('anatomyTabs') && updateSummary(data);
     autoFrame();
   }
@@ -238,6 +287,7 @@
 
   // ── Вибір блоку (Одинарний клік) ───────────────────────────────────────
   function onPick(ev) {
+    downX = ev.clientX; downY = ev.clientY;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
@@ -246,6 +296,17 @@
     if (hits.length) {
         select(hits[0].object);
     }
+  }
+
+  // Чистий клік (без обертання) по блоку → відкрити детальне вікно
+  function onPointerUp(ev) {
+    if (Math.abs(ev.clientX - downX) + Math.abs(ev.clientY - downY) > 6) return; // це було обертання
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    const hits = raycaster.intersectObjects(blockMeshes, false);
+    if (hits.length) openBlockModal(hits[0].object.userData.block);
   }
 
   function select(mesh) {
@@ -389,6 +450,240 @@
     showInfo(b);
   }
 
+  // ── FORWARD-PASS: анімація проходження даних крізь мережу ───────────────
+  function clearLights() {
+    blockMeshes.forEach(m => { m.material.emissiveIntensity = m.userData.baseEmissive; });
+  }
+
+  function lightBlock(blockId, on) {
+    blockMeshes.forEach(m => {
+      if (m.userData.block.id === blockId) {
+        m.material.emissiveIntensity = on ? 0.85 : m.userData.baseEmissive;
+      }
+    });
+  }
+
+  function makePulse(color) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 20, 20),
+      new THREE.MeshBasicMaterial({ color })
+    ));
+    g.add(new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 20, 20),
+      new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.22, depthWrite: false })
+    ));
+    g.visible = false;
+    modelGroup.add(g);
+    return g;
+  }
+
+  function createPulses() {
+    pulseMesh = makePulse(0x7be0ff);
+    gpsPulseMesh = gpsFlow.length ? makePulse(0xc79bff) : null;
+  }
+
+  // Повне скидання стану (при перебудові моделі — старі pulse вже знищено разом з групою)
+  function resetFlowState() {
+    flowState = { active: false, lanes: [], holdFrames: 0 };
+    pulseMesh = null;
+    gpsPulseMesh = null;
+    const btn = document.getElementById('walkPlayBtn');
+    if (btn) btn.innerHTML = '▶ Прогін';
+    const hud = document.getElementById('flowHud');
+    if (hud) hud.classList.remove('show');
+  }
+
+  function setHud(block) {
+    const hud = document.getElementById('flowHud');
+    if (!hud) return;
+    hud.innerHTML = `${block.title} · <b>${block.shape || ''}</b>`;
+    hud.classList.add('show');
+  }
+
+  function startFlow() {
+    if (!mainFlow.length || !pulseMesh) return;
+
+    // Прибираємо ручне виділення та розпад, щоб не конфліктували з підсвіткою
+    clearExplosion();
+    if (selectedMesh) {
+      blockMeshes.forEach(m => { if (m.userData === selectedMesh.userData) m.scale.set(1, 1, 1); });
+      selectedMesh = null;
+    }
+    clearLights();
+    controls.autoRotate = false;
+
+    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: true }];
+    if (gpsFlow.length && gpsPulseMesh) {
+      lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: false });
+    }
+    lanes.forEach(lane => {
+      lane.pulse.visible = true;
+      lane.pulse.position.copy(lane.path[0].pos);
+      lightBlock(lane.path[0].id, true);
+      if (lane.primary) { showInfo(lane.path[0].block); setHud(lane.path[0].block); }
+    });
+    flowState = { active: true, lanes, holdFrames: 0 };
+    walkIndex = 0; updateWalkPanel();
+
+    const btn = document.getElementById('walkPlayBtn');
+    if (btn) btn.innerHTML = '⏸ Пауза';
+  }
+
+  function stopFlow() {
+    if (pulseMesh) pulseMesh.visible = false;
+    if (gpsPulseMesh) gpsPulseMesh.visible = false;
+    clearLights();
+    if (flowState) { flowState.active = false; flowState.lanes = []; }
+    const btn = document.getElementById('walkPlayBtn');
+    if (btn) btn.innerHTML = '▶ Прогін';
+    const hud = document.getElementById('flowHud');
+    if (hud) hud.classList.remove('show');
+  }
+
+  function updateFlows() {
+    if (!flowState || !flowState.active) return;
+    let allDone = true;
+    flowState.lanes.forEach(lane => {
+      const path = lane.path;
+      if (!lane.done) {
+        allDone = false;
+        lane.t += lane.speed;
+        if (lane.t >= 1) {
+          lane.t = 0;
+          lane.seg++;
+          const node = path[lane.seg];
+          lightBlock(node.id, true);
+          if (lane.primary) { showInfo(node.block); setHud(node.block); }
+          if (lane.seg >= path.length - 1) lane.done = true;
+        }
+      }
+      const i = Math.min(lane.seg, path.length - 1);
+      const j = Math.min(lane.seg + 1, path.length - 1);
+      lane.pulse.position.lerpVectors(path[i].pos, path[j].pos, lane.t);
+    });
+
+    // Синхронізуємо меню «Прогін» з головним потоком
+    const primary = flowState.lanes.find(l => l.primary);
+    if (primary) { walkIndex = Math.min(primary.seg, mainFlow.length - 1); updateWalkPanel(); }
+
+    if (allDone) {
+      flowState.holdFrames++;
+      if (flowState.holdFrames > 70) stopFlow(); // ~1.2 с фінального підсвічування Softmax
+    }
+  }
+
+  // ── Меню «Прогін роботи»: список кроків + покрокове проходження ─────────
+  function buildWalkSteps() {
+    const wrap = document.getElementById('walkSteps');
+    if (!wrap) return;
+    wrap.innerHTML = mainFlow.map((n, i) =>
+      `<button class="walk-step-chip" data-i="${i}" title="${n.block.title}">
+         <span class="wsc-num">${i + 1}</span><span class="wsc-name">${n.block.title}</span>
+       </button>`
+    ).join('');
+    wrap.querySelectorAll('.walk-step-chip').forEach(btn => {
+      btn.addEventListener('click', () => walkGoto(parseInt(btn.dataset.i, 10)));
+    });
+  }
+
+  function resetWalk() { walkIndex = -1; updateWalkPanel(); }
+
+  function updateWalkPanel() {
+    const n = mainFlow.length;
+    const label = document.getElementById('walkLabel');
+    const bar = document.getElementById('walkBar');
+    if (label) label.textContent = walkIndex < 0
+      ? `Крок 0 / ${n} — натисніть «Прогін»`
+      : `Крок ${walkIndex + 1} / ${n} — ${mainFlow[walkIndex].block.title}`;
+    if (bar) bar.style.width = (walkIndex < 0 ? 0 : ((walkIndex + 1) / n) * 100) + '%';
+    const chips = document.querySelectorAll('.walk-step-chip');
+    chips.forEach((c, i) => c.classList.toggle('active', i === walkIndex));
+    if (walkIndex >= 0 && chips[walkIndex]) {
+      chips[walkIndex].scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+    }
+  }
+
+  // Ручний перехід до конкретного кроку (зупиняє авто-програвання)
+  function walkGoto(i) {
+    if (!mainFlow.length || !pulseMesh) return;
+    if (flowState && flowState.active) stopFlow();
+    clearExplosion();
+    i = Math.max(0, Math.min(mainFlow.length - 1, i));
+    walkIndex = i;
+    controls.autoRotate = false;
+    clearLights();
+    const node = mainFlow[i];
+    lightBlock(node.id, true);
+    pulseMesh.visible = true;
+    pulseMesh.position.copy(node.pos);
+    if (gpsPulseMesh) gpsPulseMesh.visible = false;
+    showInfo(node.block);
+    setHud(node.block);
+    updateWalkPanel();
+  }
+
+  function walkNext() { walkGoto(walkIndex < 0 ? 0 : walkIndex + 1); }
+  function walkPrev() { walkGoto(walkIndex < 0 ? 0 : walkIndex - 1); }
+  function walkToggle() { (flowState && flowState.active) ? stopFlow() : startFlow(); }
+
+  // ── Модальне вікно з детальним описом блоку ─────────────────────────────
+  function buildModal() {
+    modalEl = document.createElement('div');
+    modalEl.className = 'block-modal';
+    modalEl.innerHTML = `
+      <div class="block-modal-backdrop" data-close></div>
+      <div class="block-modal-card" role="dialog" aria-modal="true">
+        <button class="block-modal-close" data-close title="Закрити (Esc)">✕</button>
+        <div class="block-modal-body" id="blockModalBody"></div>
+      </div>`;
+    host.appendChild(modalEl);
+    modalEl.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close]')) { closeModal(); return; }
+      const ex = e.target.closest('[data-explode]');
+      if (ex) {
+        const mesh = meshById(ex.dataset.explode);
+        closeModal();
+        if (mesh) { select(mesh); explodeBlock(mesh); }
+      }
+    });
+  }
+
+  function meshById(id) {
+    return blockMeshes.find(m => m.userData.block.id === id) || null;
+  }
+
+  function openBlockModal(b) {
+    if (!modalEl) return;
+    const cat = ANATOMY_CATEGORIES[b.cat];
+    const hex = '#' + cat.color.toString(16).padStart(6, '0');
+    const chips = (b.chips || []).map(c => `<span class="chip">${c}</span>`).join('');
+    const micro = (b.details || []).map(d => {
+      const dc = '#' + (d.color || cat.color).toString(16).padStart(6, '0');
+      return `<li><span class="micro-dot" style="background:${dc}"></span>${d.title}</li>`;
+    }).join('');
+    const body = document.getElementById('blockModalBody');
+    body.innerHTML = `
+      <div class="bm-head">
+        <span class="bm-cat" style="border-color:${hex};color:${hex}">${cat.label}</span>
+        <h3>${b.title}</h3>
+      </div>
+      <p class="bm-lead">${b.desc || ''}</p>
+      ${b.purpose ? `<div class="bm-field"><div class="bm-label">🎯 Для чого</div><p>${b.purpose}</p></div>` : ''}
+      ${b.how ? `<div class="bm-field"><div class="bm-label">⚙️ Як працює</div><p>${b.how}</p></div>` : ''}
+      <div class="bm-grid">
+        <div class="bm-chip"><span class="k">Форма виходу</span><span class="v">${b.shape || '—'}</span></div>
+        <div class="bm-chip"><span class="k">Категорія</span><span class="v">${cat.label}</span></div>
+      </div>
+      ${chips ? `<div class="bm-tags">${chips}</div>` : ''}
+      ${micro ? `<div class="bm-field"><div class="bm-label">🔬 Мікроархітектура</div><ul class="bm-micro">${micro}</ul></div>` : ''}
+      ${(b.details && b.details.length) ? `<button class="bm-explode" data-explode="${b.id}">🧩 Показати у 3D</button>` : ''}
+    `;
+    modalEl.classList.add('open');
+  }
+
+  function closeModal() { if (modalEl) modalEl.classList.remove('open'); }
+
   // ── Легенда + резюме ──────────────────────────────────────────────────
   function buildLegend() {
     const el = document.getElementById('legend');
@@ -430,6 +725,8 @@
         }
       });
     }
+
+    updateFlows(); // Рух «імпульсів» forward-pass
 
     renderer.render(scene, camera);
   }

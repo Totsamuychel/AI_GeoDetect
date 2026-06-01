@@ -6,76 +6,72 @@
 
 ## АНОТАЦІЯ
 
-Кваліфікаційна робота бакалавра присвячена розробці та дослідженню нейромережної моделі для
-автоматичного визначення географічного місцезнаходження зображень на основі аналізу вуличних
-фотографій міст України та Європи. Актуальність роботи зумовлена стрімким зростанням обсягів
+Кваліфікаційна робота бакалавра присвячена розробці та порівняльному дослідженню нейромережних
+моделей для автоматичного визначення географічного місцезнаходження зображень на рівні міста на
+основі аналізу вуличних фотографій. Актуальність роботи зумовлена стрімким зростанням обсягів
 відкритих геопросторових даних, появою краудсорсингових платформ вуличної фотографії (Mapillary,
 KartaView) та практичною потребою в інструментах автоматичної геолокації зображень для задач
 розвідки з відкритих джерел (OSINT), верифікації медіаконтенту, урбаністичного аналізу та управління
 міською інфраструктурою.
 
 У роботі досліджено три архітектури нейронних мереж: базову модель на основі EfficientNet-B2 з
-класифікаційною головою, дотренований StreetCLIP (CLIP-ViT-L-14-336) із синтетичними підписами, а
-також контрастивну модель на базі підходу GeoCLIP із кодуванням GPS-координат через випадкові
-фур'є-ознаки (Random Fourier Features). Для навчання та оцінки моделей сформовано датасет обсягом
-приблизно 35 000 зображень із восьми міст: п'яти українських (Київ, Львів, Одеса, Харків, Дніпро) та
-трьох європейських (Варшава, Прага, Будапешт). Основними джерелами даних слугували набір
-OpenStreetView-5M (OSV-5M), відфільтрований за географічними координатами, та зображення з платформи
-Mapillary, завантажені за допомогою бібліотеки ZenSVI.
+класифікаційною головою, StreetCLIP (CLIP-ViT-L-14-336) з лінійним зондом, а також контрастивну
+модель на базі підходу GeoCLIP із кодуванням GPS-координат через випадкові фур'є-ознаки (Random
+Fourier Features). Для навчання та оцінки моделей сформовано датасет обсягом 7 494 зображень трьох
+центральноєвропейських міст — Варшави (Польща), Праги (Чехія) та Будапешта (Угорщина) — отриманих з
+платформи Mapillary. Поділ на навчальну (5 271), валідаційну (1 223) та тестову (1 000) вибірки
+виконано методом геоблочного розподілу на основі гексагональної системи H3, що унеможливлює витік
+географічної інформації між вибірками.
 
-Проведено порівняльний аналіз моделей за метриками Top-1, Top-3 та Top-5 точності класифікації на
-рівні міста, а також за середньою відстанню Гаверсина між передбаченою та фактичною локацією.
-Експериментальні результати засвідчили, що базова модель EfficientNet-B2 досягає точності Top-1
-приблизно 72,3% на тестовій вибірці, тоді як дотренований StreetCLIP демонструє найвищу точність —
-81,4%, а модель на базі GeoCLIP — 78,1%. Медіанна похибка локалізації для StreetCLIP становить 42,7
-км.
+Проведено порівняльний аналіз моделей за метриками Top-1 точності класифікації на рівні міста,
+macro-F1, середньою та медіанною відстанню Гаверсина, а також за GeoScore. Експериментальні
+результати на тестовому наборі (1 000 зображень) засвідчили, що базова модель EfficientNet-B2 досягає
+точності Top-1 91,8%, StreetCLIP демонструє найвищу точність — 96,9% (GeoScore 4 940/5 000), а модель
+на базі GeoCLIP — 90,6%. Найскладнішим для всіх архітектур виявилось місто Варшава.
 
-Наукова новизна роботи полягає в адаптації сучасних CLIP-базованих моделей геолокації для
-українського урбаністичного контексту, проведенні порівняльного аналізу трьох архітектурних підходів
-на єдиному датасеті та розробці методології географічно-стратифікованого поділу даних на основі
-гексагональної системи індексації H3. Практичне значення отриманих результатів визначається
-можливістю застосування розроблених моделей в системах OSINT-аналітики, автоматичної верифікації
-географічного контексту зображень у засобах масової інформації, міського планування та розвитку
-туристичної інфраструктури.
+Наукова новизна роботи полягає в порівняльній оцінці трьох принципово різних архітектурних підходів
+(CNN-класифікація, zero-shot/fine-tuning CLIP, контрастивне навчання з GPS-кодуванням) на єдиному
+регіональному датасеті та у застосуванні методології геоблочного поділу даних на основі H3-індексів,
+що запобігає просторовому витоку між вибірками. Практичне значення отриманих результатів
+визначається можливістю застосування розроблених моделей в системах OSINT-аналітики, автоматичної
+верифікації географічного контексту зображень у засобах масової інформації та міського планування.
 
-**Ключові слова:** геолокація зображень, нейронні мережі, CLIP, StreetCLIP, GeoCLIP, EfficientNet, трансферне навчання, вуличні фотографії, OSINT, Україна.
+**Ключові слова:** геолокація зображень, нейронні мережі, CLIP, StreetCLIP, GeoCLIP, EfficientNet, трансферне навчання, вуличні фотографії, Mapillary, H3-стратифікація.
 
 ---
 
 ## ABSTRACT
 
-The bachelor's thesis is devoted to the development and investigation of a neural network model for
-automatic geographic location determination of images based on the analysis of street-level
-photographs from cities of Ukraine and Europe. The relevance of this work is driven by the rapid
-growth of open geospatial data, the emergence of crowdsourced street photography platforms
-(Mapillary, KartaView), and the practical demand for automatic image geolocation tools in
-open-source intelligence (OSINT), media content verification, urban analytics, and urban
-infrastructure management.
+The bachelor's thesis is devoted to the development and comparative study of neural network models
+for automatic city-level geographic location determination of images based on the analysis of
+street-level photographs. The relevance of this work is driven by the rapid growth of open
+geospatial data, the emergence of crowdsourced street photography platforms (Mapillary, KartaView),
+and the practical demand for automatic image geolocation tools in open-source intelligence (OSINT),
+media content verification, urban analytics, and urban infrastructure management.
 
-The study investigates three neural network architectures: a baseline model based on
-EfficientNet-B2 with a classification head, a fine-tuned StreetCLIP (CLIP-ViT-L-14-336) with
-synthetic captions, and a contrastive model based on the GeoCLIP approach with GPS coordinate
-encoding through Random Fourier Features. For training and evaluation, a dataset of approximately
-35,000 images from eight cities was assembled: five Ukrainian cities (Kyiv, Lviv, Odesa, Kharkiv,
-Dnipro) and three European cities (Warsaw, Prague, Budapest). The primary data sources were the
-OpenStreetView-5M (OSV-5M) dataset filtered by geographic coordinates, and images from the Mapillary
-platform downloaded using the ZenSVI library.
+The study investigates three neural network architectures: a baseline model based on EfficientNet-B2
+with a classification head, StreetCLIP (CLIP-ViT-L-14-336) with a linear probe, and a contrastive
+model based on the GeoCLIP approach with GPS coordinate encoding through Random Fourier Features. For
+training and evaluation, a dataset of 7,494 images from three Central European cities — Warsaw
+(Poland), Prague (Czech Republic), and Budapest (Hungary) — was collected from the Mapillary
+platform. The dataset was split into training (5,271), validation (1,223), and test (1,000) subsets
+using a geo-block partitioning method based on the H3 hexagonal indexing system, which prevents
+geographic data leakage between subsets.
 
-A comparative analysis of the models was conducted using Top-1, Top-3, and Top-5 classification
-accuracy at the city level, as well as the mean Haversine distance between predicted and actual
-locations. Experimental results demonstrated that the baseline EfficientNet-B2 model achieves a
-Top-1 accuracy of approximately 72.3% on the test set, while the fine-tuned StreetCLIP achieves the
-highest accuracy at 81.4%, and the GeoCLIP-based model reaches 78.1%. The median localization error
-for StreetCLIP is 42.7 km.
+A comparative analysis of the models was conducted using Top-1 classification accuracy at the city
+level, macro-F1, mean and median Haversine distance, and GeoScore. Experimental results on the test
+set (1,000 images) demonstrated that the baseline EfficientNet-B2 achieves Top-1 accuracy of 91.8%,
+StreetCLIP achieves the highest accuracy at 96.9% (GeoScore 4,940/5,000), and the GeoCLIP-based
+model reaches 90.6%. Warsaw proved to be the most challenging city for all architectures.
 
-The scientific novelty of this work lies in the adaptation of modern CLIP-based geolocation models
-for the Ukrainian urban context, a comparative analysis of three architectural approaches on a
-unified dataset, and the development of a geographically stratified data splitting methodology based
-on the H3 hexagonal indexing system. The practical significance of the results is determined by the
-applicability of the developed models in OSINT analytics systems, automatic verification of
-geographic context in media imagery, urban planning, and tourism infrastructure development.
+The scientific novelty of this work lies in the comparative evaluation of three principally different
+architectural approaches (CNN classification, zero-shot/fine-tuning CLIP, contrastive learning with
+GPS encoding) on a unified regional dataset, and in the application of a geo-block data splitting
+methodology based on H3 indices that prevents spatial leakage between subsets. The practical
+significance of the results is determined by the applicability of the developed models in OSINT
+analytics systems, automatic verification of geographic context in media imagery, and urban planning.
 
-**Keywords:** image geolocation, neural networks, CLIP, StreetCLIP, GeoCLIP, EfficientNet, transfer learning, street-level photography, OSINT, Ukraine.
+**Keywords:** image geolocation, neural networks, CLIP, StreetCLIP, GeoCLIP, EfficientNet, transfer learning, street-level photography, Mapillary, H3 stratification.
 
 ---
 
@@ -246,9 +242,9 @@ for Information Resilience та InformNapalm, регулярно викорис�
 Mapillary, Global Streetscapes) та обґрунтувати вибір джерел даних для формування цільового
 датасету.
 
-3. Сформувати збалансований датасет вуличних фотографій для восьми міст (п'ять українських та три
-європейських) з дотриманням вимог географічної стратифікації та просторового розділення навчальної
-та тестової вибірок.
+3. Сформувати збалансований датасет вуличних фотографій для трьох центральноєвропейських міст
+(Варшава, Прага, Будапешт) з дотриманням вимог географічної стратифікації та просторового
+розділення навчальної та тестової вибірок.
 
 4. Реалізувати базову модель класифікації на основі архітектури EfficientNet-B2 з трансферним навчанням.
 
@@ -301,36 +297,24 @@ EfficientNet, StreetCLIP та GeoCLIP.
 
 Наукова новизна кваліфікаційної роботи визначається такими положеннями:
 
-Вперше проведено адаптацію CLIP-базованих моделей геолокації (StreetCLIP, GeoCLIP) для українського
-урбаністичного контексту з урахуванням специфічних візуальних ознак міст України: кириличних
-написів, характерних архітектурних стилів, особливостей дорожньої інфраструктури.
-
 Виконано порівняльний аналіз трьох принципово різних архітектурних підходів до геолокації зображень
-(класифікація на основі CNN, zero-shot із синтетичними підписами, контрастивне навчання з
-GPS-кодуванням) на єдиному датасеті, що забезпечує коректність порівняння.
+(класифікація на основі CNN — EfficientNet-B2, zero-shot/fine-tuning CLIP — StreetCLIP, контрастивне
+навчання з GPS-кодуванням — GeoCLIP) на єдиному регіональному датасеті трьох
+центральноєвропейських міст, що забезпечує коректність порівняння та ізолює вплив архітектурного
+підходу від інших змінних.
 
-Запропоновано методологію географічно-стратифікованого поділу датасету на навчальну, валідаційну та
-тестову вибірки з використанням гексагональної системи просторового індексування H3, що запобігає
-витоку географічної інформації між вибірками.
+Показано, що CLIP-базована модель StreetCLIP з лінійним зондом при навчанні на обмеженому датасеті
+(~5 000 зображень) досягає точності 96,9% у задачі розрізнення трьох геогра фічно близьких
+центральноєвропейських міст, що демонструє ефективність доменно-специфічного попереднього навчання
+для регіональної геолокації.
+
+Застосовано методологію геоблочного поділу датасету на навчальну, валідаційну та тестову вибірки з
+використанням гексагональної системи просторового індексування H3, що запобігає витоку
+географічної інформації між вибірками та забезпечує коректну оцінку узагальнювальної здатності
+моделей.
 
 
 Детальніше обґрунтуємо кожен аспект наукової новизни.
-
-Щодо адаптації CLIP-базованих моделей для українського контексту:
-існуючі моделі геолокації (StreetCLIP, GeoCLIP)
-навчені переважно на зображеннях із Західної Європи,
-Північної Америки та Східної Азії.
-Українські міста мають специфічні візуальні характеристики,
-що недостатньо представлені в тренувальних наборах цих моделей:
-кириличні вивіски українською мовою
-(на відміну від російської кирилиці),
-характерне поєднання радянської та сучасної забудови,
-специфічні елементи дорожньої інфраструктури
-(тип дорожніх знаків, розмітки, світлофорів),
-а також регіональні особливості архітектури
-(австро-угорський вплив у Львові, причорноморський стиль в Одесі).
-Дотренування моделей на цільовому датасеті
-дозволяє адаптувати їх до цих специфічних ознак.
 
 Щодо порівняльного аналізу трьох архітектур:
 у відомій літературі відсутнє порівняння
@@ -434,7 +418,7 @@ GPS-теги, часові позначки чи інші зовнішні си�
 розрізняти мільйони можливих місць на поверхні Землі, що за своєю комбінаторною складністю значно
 перевищує більшість стандартних задач класифікації в комп'ютерному зорі. Навіть при обмеженні задачі
 рівнем міста (city-level geolocation), кількість класів може сягати тисяч. У контексті даної роботи
-розглядається задача класифікації на рівні восьми міст, що є значно простішою за глобальну
+розглядається задача класифікації на рівні трьох міст, що є значно простішою за глобальну
 геолокацію, проте зберігає принципові виклики, пов'язані з візуальною неоднозначністю та
 внутрішньокласовою варіативністю.
 
@@ -1227,7 +1211,7 @@ g(\mathbf{x}) = [z_{\sigma_1}(\mathbf{x}), z_{\sigma_2}(\mathbf{x}), ..., z_{\si
 модель порівнює ембедінг зображення-запиту з галереєю GPS-ембедінгів.
 Галерея формується шляхом рівномірного семплінгу точок на поверхні Землі
 або зосередженням на регіоні інтересу.
-Для нашої задачі з 8 містами галерея може бути побудована
+Для нашої задачі з трьома містами галерея може бути побудована
 як щільна сітка точок у межах bounding box кожного міста,
 що забезпечує високу роздільну здатність прогнозу.
 
@@ -1410,8 +1394,8 @@ GeoRanker є найсучаснішим (state-of-the-art) методом
 теоретично дозволяє необмежену точність. Zero-shot моделі (StreetCLIP) мають перевагу гнучкості:
 набір класів (міст, регіонів) може бути змінений під час інференсу без перенавчання.
 
-Для контексту дипломної роботи, де задача зводиться до класифікації за 8 містами, відмінності між
-підходами стають менш критичними: навіть просте передбачення найбільш імовірного міста з 8 варіантів
+Для контексту дипломної роботи, де задача зводиться до класифікації за трьома містами, відмінності між
+підходами стають менш критичними: навіть просте передбачення найбільш імовірного міста з трьох варіантів
 є адекватною формалізацією. Проте вибір різних архітектур дозволяє порівняти їхні сильні та слабкі
 сторони на практичній задачі обмеженого масштабу.
 

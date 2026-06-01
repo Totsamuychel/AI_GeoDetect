@@ -1,0 +1,17 @@
+{
+  "pythonVersion": "3.13",
+  "pythonPlatform": "Windows",
+  "extraPaths": [
+    "code",
+    "C:\\Users\\mrbatnik\\AppData\\Roaming\\Python\\Python313\\site-packages",
+    "C:\\ProgramData\\anaconda3\\Lib\\site-packages"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "**/.git",
+    "dataset",
+    "cache",
+    ".venv",
+    "venv"
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "checkpoint_path": "checkpoints/streetclip_v2/best_model.pth",
+  "architecture": "streetclip",
+  "num_classes": 4,
+  "num_test_samples": 3716,
+  "top1_accuracy": 0.893702906350915,
+  "macro_f1": 0.8793923904046865,
+  "balanced_accuracy": 0.8761997384646855,
+  "mean_distance_km": 76.74141803048532,
+  "median_distance_km": 4.625683583850998,
+  "p25_distance_km": 3.0744121309976222,
+  "p75_distance_km": 10.867271322270474,
+  "p90_distance_km": 442.8158621261807,
+  "fraction_within_25km": 0.8861679224973089,
+  "fraction_within_200km": 0.893702906350915,
+  "fraction_within_750km": 0.9730893433799784,
+  "mean_geoscore": 4793.444245306783,
+  "median_geoscore": 4984.529631590539,
+  "per_class_accuracy": {
+    "budapest": {
+      "accuracy": 0.85,
+      "count": 740
+    },
+    "kyiv": {
+      "accuracy": 0.9618983957219251,
+      "count": 1496
+    },
+    "prague": {
+      "accuracy": 0.8306010928961749,
+      "count": 732
+    },
+    "warsaw": {
+      "accuracy": 0.8622994652406417,
+      "count": 748
+    }
+  },
+  "top3_accuracy": 0.9873519913885899,
+  "top5_accuracy": null,
+  "val_loss_from_ckpt": 0.606944584239544,
+  "val_acc_from_ckpt": 0.9005568623542786
+}

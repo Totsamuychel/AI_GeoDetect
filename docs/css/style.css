@@ -222,12 +222,34 @@ main {
 }
 .fs-btn:hover { background: var(--panel-2); border-color: var(--accent); }
 
+/* Кнопка запуску forward-pass анімації */
+.flow-btn {
+  position: absolute; right: 56px; bottom: 12px; z-index: 3;
+  height: 34px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: rgba(7,11,19,.7); color: var(--text); cursor: pointer;
+  font-size: 13px; font-weight: 600; transition: .2s; white-space: nowrap;
+}
+.flow-btn:hover { background: var(--panel-2); border-color: var(--accent); }
+
+/* HUD з поточною формою тензора під час проходу */
+.flow-hud {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3;
+  font-size: 13px; color: var(--muted); background: rgba(7,11,19,.78);
+  padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
+  font-variant-numeric: tabular-nums; pointer-events: none;
+  opacity: 0; transition: opacity .25s; max-width: 90%;
+}
+.flow-hud.show { opacity: 1; }
+.flow-hud b { color: var(--accent); font-weight: 700; }
+
 /* Fullscreen Mode */
 .canvas-host.fullscreen {
   position: fixed; inset: 0; z-index: 9999; border-radius: 0; border: none;
   min-height: 100vh;
 }
 .canvas-host.fullscreen .fs-btn { top: 16px; bottom: auto; right: 16px; }
+.canvas-host.fullscreen .flow-btn { top: 16px; bottom: auto; right: 60px; }
+.canvas-host.fullscreen .flow-hud { top: 20px; }
 
 .block-info {
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
