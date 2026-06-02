@@ -580,6 +580,8 @@ main {
 .fs-exit:hover { background: var(--danger); color: #fff; }
 .canvas-host.fullscreen .fs-exit { display: inline-flex; }
 .canvas-host.fullscreen .fs-btn { display: none; }
+/* підказка керування — нижче меню вибору моделі, щоб не перекривались */
+.canvas-host.fullscreen .canvas-hint { top: 64px; left: 16px; }
 
 /* ── Fullscreen анатомії: підняти main над липкою шапкою + меню вибору моделі ── */
 body.anatomy-fs main { z-index: 10000; }      /* інакше шапка (z50) перекриває fixed-host */
