@@ -567,7 +567,8 @@
         if (m.userData.block.id === blockId) { 
             m.material.emissiveIntensity = on ? 1.4 : m.userData.baseEmissive; 
             m.material.opacity = 1.0; 
-            if (on && glowMesh) {
+            // Оновлюємо glowMesh лише якщо не йде анімація прогону
+            if (on && glowMesh && (!flowState || !flowState.active)) {
                 const box = new THREE.Box3().setFromObject(m);
                 const size = new THREE.Vector3(); box.getSize(size);
                 const center = new THREE.Vector3(); box.getCenter(center);
