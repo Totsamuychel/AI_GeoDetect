@@ -44,9 +44,11 @@
     ctx.fillText(text, canvas.width / 2, canvas.height / 2);
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    // depthTest:true → мітки задніх блоків ховаються за передніми (без накладань).
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sprite = new THREE.Sprite(mat);
-    const scale = 0.0042;
+    sprite.renderOrder = 2;
+    const scale = 0.0040;
     sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
     return sprite;
   }
@@ -118,7 +120,7 @@
         }
         return;
       }
-      if (host.classList.contains('fullscreen') && !(modalEl && modalEl.classList.contains('open'))) {
+      if (hostInView() && !(modalEl && modalEl.classList.contains('open'))) {
         if (e.key === 'ArrowRight') { e.preventDefault(); walkNext(); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); walkPrev(); }
         else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); walkToggle(); }
@@ -213,20 +215,22 @@
       for (let i = 0; i < gc.length - 1; i++) addArrow(gc[i].x2, gc[i + 1].x1, 0, Z, 0xb07cff);
     }
 
-    // Перехресні зв'язки
+    // Перехресні зв'язки (захищено: відсутня категорія не повинна валити buildModel,
+    // інакше createPulses() не виконається → walkGoto/startFlow «німіють»)
     data.blocks.forEach(b => {
-      if (b.linkTo && centersMap[b.id] && centersMap[b.linkTo]) {
-        const p1 = centersMap[b.id];
-        const p2 = centersMap[b.linkTo];
-        const dir = new THREE.Vector3().subVectors(p2, p1);
-        const len = dir.length() - (b.w * UNIT) / 2 - 0.2;
-        dir.normalize();
-        
-        const start = p1.clone().add(dir.clone().multiplyScalar((b.w * UNIT) / 2));
-        const color = ANATOMY_CATEGORIES[b.cat].color;
-        const arrow = new THREE.ArrowHelper(dir, start, len, color, 0.4, 0.25);
-        modelGroup.add(arrow);
-      }
+      try {
+        if (b.linkTo && centersMap[b.id] && centersMap[b.linkTo]) {
+          const p1 = centersMap[b.id];
+          const p2 = centersMap[b.linkTo];
+          const dir = new THREE.Vector3().subVectors(p2, p1);
+          const len = dir.length() - (b.w * UNIT) / 2 - 0.2;
+          dir.normalize();
+          const start = p1.clone().add(dir.clone().multiplyScalar((b.w * UNIT) / 2));
+          const cat = ANATOMY_CATEGORIES[b.cat];
+          const color = cat ? cat.color : 0x4f8cff;
+          modelGroup.add(new THREE.ArrowHelper(dir, start, len, color, 0.4, 0.25));
+        }
+      } catch (err) { console.warn('anatomy link skip', b.id, err); }
     });
 
     scene.add(modelGroup);
@@ -271,7 +275,7 @@
     }
 
     const label = makeLabel(b.title);
-    label.position.set(0, H / 2 + 0.55, 0);
+    label.position.set(0, H / 2 + 0.85, 0);
     group.add(label);
 
     modelGroup.add(group);
@@ -306,7 +310,7 @@
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObjects(blockMeshes, false);
-    if (hits.length) openBlockModal(hits[0].object.userData.block);
+    if (hits.length) openBlockModal(hits[0].object.userData.block, ev);
   }
 
   function select(mesh) {
@@ -634,6 +638,7 @@
     modalEl.innerHTML = `
       <div class="block-modal-backdrop" data-close></div>
       <div class="block-modal-card" role="dialog" aria-modal="true">
+        <span class="block-modal-arrow"></span>
         <button class="block-modal-close" data-close title="Закрити (Esc)">✕</button>
         <div class="block-modal-body" id="blockModalBody"></div>
       </div>`;
@@ -653,7 +658,7 @@
     return blockMeshes.find(m => m.userData.block.id === id) || null;
   }
 
-  function openBlockModal(b) {
+  function openBlockModal(b, ev) {
     if (!modalEl) return;
     const cat = ANATOMY_CATEGORIES[b.cat];
     const hex = '#' + cat.color.toString(16).padStart(6, '0');
@@ -680,6 +685,34 @@
       ${(b.details && b.details.length) ? `<button class="bm-explode" data-explode="${b.id}">🧩 Показати у 3D</button>` : ''}
     `;
     modalEl.classList.add('open');
+    positionPopover(ev);
+  }
+
+  // Розміщує поповер ПОРУЧ із блоком (за позицією кліку) + стрілка до блоку.
+  function positionPopover(ev) {
+    const card = modalEl.querySelector('.block-modal-card');
+    const arrow = modalEl.querySelector('.block-modal-arrow');
+    if (!card) return;
+    const rect = host.getBoundingClientRect();
+    const px = ev ? ev.clientX - rect.left : rect.width / 2;
+    const py = ev ? ev.clientY - rect.top : rect.height / 2;
+    const cw = Math.min(330, rect.width - 24);
+    card.style.width = cw + 'px';
+    // тимчасово показуємо, щоб виміряти висоту
+    card.style.left = '-9999px'; card.style.top = '0px';
+    const ch = Math.min(card.offsetHeight, rect.height - 24);
+    let side, left;
+    if (px + 20 + cw <= rect.width - 8) { side = 'left'; left = px + 20; }       // картка праворуч, стрілка ліворуч
+    else { side = 'right'; left = px - 20 - cw; }                                 // картка ліворуч, стрілка праворуч
+    left = Math.max(8, Math.min(left, rect.width - cw - 8));
+    let top = Math.max(8, Math.min(py - 46, rect.height - ch - 8));
+    card.style.left = left + 'px';
+    card.style.top = top + 'px';
+    if (arrow) {
+      const ay = Math.max(16, Math.min(py - top, ch - 16));
+      arrow.style.top = ay + 'px';
+      arrow.className = 'block-modal-arrow ' + side;
+    }
   }
 
   function closeModal() { if (modalEl) modalEl.classList.remove('open'); }
@@ -745,6 +778,13 @@
     const W = host.clientWidth, Ht = host.clientHeight || 460;
     camera.aspect = W / Ht; camera.updateProjectionMatrix();
     renderer.setSize(W, Ht);
+  }
+
+  // Чи секція анатомії зараз у зоні видимості (для керування «прогоном» з клавіатури)
+  function hostInView() {
+    if (host.classList.contains('fullscreen')) return true;
+    const r = host.getBoundingClientRect();
+    return r.top < window.innerHeight * 0.5 && r.bottom > window.innerHeight * 0.5;
   }
 
   function disposeGroup(g) {

@@ -273,7 +273,7 @@ main {
 .fs-btn { top: 12px; bottom: auto; }
 
 .walk-panel {
-  position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 4;
+  position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 6; pointer-events: auto;
   display: flex; flex-direction: column; gap: 8px;
   background: rgba(10,14,23,.85); backdrop-filter: blur(8px);
   border: 1px solid var(--border); border-radius: 14px; padding: 10px;
@@ -303,15 +303,25 @@ main {
 .walk-label { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Модальне вікно з детальним описом блоку ─────────────────────────────── */
-.block-modal { position: absolute; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center; padding: 20px; }
-.block-modal.open { display: flex; }
-.block-modal-backdrop { position: absolute; inset: 0; background: rgba(4,8,16,.66); backdrop-filter: blur(3px); }
+/* Поповер біля блоку (а не модалка на весь екран) */
+.block-modal { position: absolute; inset: 0; z-index: 50; display: none; }
+.block-modal.open { display: block; }
+.block-modal-backdrop { position: absolute; inset: 0; background: transparent; }
 .block-modal-card {
-  position: relative; z-index: 1; width: min(540px, 100%); max-height: calc(100% - 32px); overflow: auto;
-  background: linear-gradient(180deg, #121a2e, #0c1120); border: 1px solid var(--border);
-  border-radius: 16px; padding: 22px; box-shadow: 0 24px 60px rgba(0,0,0,.5); animation: bmIn .18s ease;
+  position: absolute; z-index: 1; width: 330px; max-height: calc(100% - 24px); overflow: auto;
+  background: linear-gradient(180deg, #121a2e, #0c1120); border: 1px solid var(--accent);
+  border-radius: 14px; padding: 18px; box-shadow: 0 18px 48px rgba(0,0,0,.55); animation: bmIn .15s ease;
 }
-@keyframes bmIn { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+.block-modal-arrow { position: absolute; width: 0; height: 0; }
+.block-modal-arrow.left {
+  left: -9px; border-top: 9px solid transparent; border-bottom: 9px solid transparent;
+  border-right: 9px solid var(--accent);
+}
+.block-modal-arrow.right {
+  right: -9px; border-top: 9px solid transparent; border-bottom: 9px solid transparent;
+  border-left: 9px solid var(--accent);
+}
+@keyframes bmIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 .block-modal-close {
   position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 8px;
   border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
