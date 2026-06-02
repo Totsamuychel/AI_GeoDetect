@@ -600,14 +600,18 @@
     if (!mainFlow.length) return;
     clearExplosion(); if (selectedMesh) resetMeshVisual(selectedMesh); selectedMesh = null;
     clearLights(); controls.autoRotate = false;
+    if (glowMesh) glowMesh.visible = false; // Ховаємо світіння перед початком
     const SPEED = 0.016;
     const lanes = [{ path: mainFlow, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: true }];
     if (gpsFlow.length) lanes.push({ path: gpsFlow, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: false });
+    
+    flowState = { active: true, lanes, holdFrames: 0 }; // Встановлюємо статус ДО підсвітки
+    
     lanes.forEach(lane => {
       lightBlock(lane.path[0].id, true);
       if (lane.primary) { showInfo(lane.path[0].block); setHud(lane.path[0].block); }
     });
-    flowState = { active: true, lanes, holdFrames: 0 };
+    
     walkIndex = 0; updateWalkPanel();
     const btn = document.getElementById('walkPlayBtn'); if (btn) btn.innerHTML = '⏸ Пауза';
   }
