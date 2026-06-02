@@ -14,6 +14,7 @@
 
   let scene, camera, renderer, controls, raycaster, pointer;
   let modelGroup, blockMeshes = [], selectedMesh = null;
+  let blockLabels = [];        // підписи блоків {label, blockId, baseY} — для зсуву при розпаді
   let currentKey = 'streetclip';
 
   // Змінні для ефекту розпаду (explode)
@@ -180,7 +181,7 @@
     currentKey = key;
     if (modelGroup) { scene.remove(modelGroup); disposeGroup(modelGroup); }
     modelGroup = new THREE.Group();
-    blockMeshes = []; selectedMesh = null;
+    blockMeshes = []; selectedMesh = null; blockLabels = [];
     clearExplosion(); // Скидаємо розпад при зміні моделі
     resetFlowState();  // Скидаємо forward-pass анімацію
     mainFlow = []; gpsFlow = [];
@@ -291,6 +292,7 @@
     const label = makeLabel(b.title);
     label.position.set(0, H / 2 + 0.85, 0);
     group.add(label);
+    blockLabels.push({ label, blockId: b.id, baseY: H / 2 + 0.85 });
 
     modelGroup.add(group);
   }
@@ -834,6 +836,16 @@
           item.edges.material.opacity += 0.04;
           item.lbl.material.opacity += 0.04;
         }
+      });
+    }
+
+    // Підпис розкладеного блоку плавно опускається вниз (звільняє місце мікро-підписам),
+    // решта підписів повертаються на базову висоту.
+    if (blockLabels.length) {
+      const exId = explodedGroup ? explodedGroup.userData.blockId : null;
+      blockLabels.forEach(it => {
+        const target = (it.blockId === exId) ? -(H / 2) - 0.5 : it.baseY;
+        it.label.position.y += (target - it.label.position.y) * 0.14;
       });
     }
 
