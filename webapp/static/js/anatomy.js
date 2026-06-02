@@ -65,6 +65,10 @@
     return sprite;
   }
 
+  function createPulses() {
+      // Empty function to prevent ReferenceError in buildModel since we removed the moving pulse objects
+  }
+
   function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
