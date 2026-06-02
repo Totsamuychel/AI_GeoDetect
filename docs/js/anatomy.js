@@ -16,16 +16,21 @@
   let modelGroup, blockMeshes = [], selectedMesh = null, hoveredMesh = null;
   let glowMesh = null;         // Спеціальний меш для світіння
   let particles = null;        // Частинки фону
+  let blockLabels = [];        // підписи блоків {label, blockId, baseY} — для зсуву при розпаді
   let currentKey = 'streetclip';
 
   // Змінні для ефекту розпаду (explode)
   let explodedGroup = null;
   let explodingMeshes = [];
+  let microMeshes = [];        // мікро-блоки (деталі) для кліку/поповера
 
   // Forward-pass анімація: упорядкований шлях потоку, «імпульси» та стан
   let mainFlow = [], gpsFlow = [];
   let pulseMesh = null, gpsPulseMesh = null;
   let flowState = { active: false, lanes: [], holdFrames: 0 };
+  let walkIndex = -1;          // поточний крок «прогону» (головний потік)
+  let modalEl = null;          // модальне вікно детального опису блоку
+  let downX = 0, downY = 0;    // позиція натискання (для відрізнення кліку від обертання)
 
   // ── Текстова мітка над блоком (sprite) ─────────────────────────────────
   function makeLabel(text, fontSize = 44, isMicro = false) {
@@ -52,8 +57,9 @@
     
     const tex = new THREE.CanvasTexture(canvas);
     tex.minFilter = THREE.LinearFilter;
-    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
+    const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: true, depthWrite: false });
     const sprite = new THREE.Sprite(mat);
+    sprite.renderOrder = 2;
     const scale = isMicro ? 0.0032 : 0.0042;
     sprite.scale.set(canvas.width * scale, canvas.height * scale, 1);
     return sprite;
@@ -86,11 +92,11 @@
     controls.dampingFactor = 0.08;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.6;
-    controls.minDistance = 5;
-    controls.maxDistance = 50;
+    controls.minDistance = 6;
+    controls.maxDistance = 55;
     controls.addEventListener('start', () => { controls.autoRotate = false; });
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.55));
     const key = new THREE.DirectionalLight(0xffffff, 1.0);
     key.position.set(10, 20, 10); scene.add(key);
     const fill = new THREE.DirectionalLight(0x4f8cff, 0.6);
@@ -98,53 +104,84 @@
 
     raycaster = new THREE.Raycaster();
     pointer = new THREE.Vector2();
-    
     renderer.domElement.addEventListener('pointerdown', onPick);
     renderer.domElement.addEventListener('pointermove', onHover);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
     renderer.domElement.addEventListener('dblclick', onDoubleClick);
 
     // Fullscreen toggle
     const fsBtn = document.getElementById('fullscreenBtn');
-    if (fsBtn) {
-      fsBtn.addEventListener('click', () => {
-        host.classList.toggle('fullscreen');
-        const isFS = host.classList.contains('fullscreen');
-        fsBtn.innerHTML = isFS ? '✕' : '⛶';
-        fsBtn.title = isFS ? 'Закрити' : 'На весь екран';
-        if (!isFS) stopFlow(); 
-        onResize();
+    if (fsBtn) fsBtn.addEventListener('click', () => {
+      host.classList.contains('fullscreen') ? exitFullscreen() : enterFullscreen();
+    });
+
+    const exitBtn = document.createElement('button');
+    exitBtn.id = 'fsExitBtn';
+    exitBtn.className = 'fs-exit';
+    exitBtn.innerHTML = '✕ Вийти';
+    exitBtn.title = 'Вийти з повного екрана (Esc)';
+    exitBtn.addEventListener('click', exitFullscreen);
+    host.appendChild(exitBtn);
+
+    const fsModels = document.createElement('div');
+    fsModels.className = 'fs-models';
+    const fsLabels = { streetclip: 'StreetCLIP', baseline: 'Baseline CNN', geoclip: 'GeoCLIP' };
+    fsModels.innerHTML = Object.keys(fsLabels).map(k =>
+      `<button class="fs-model-btn${k === currentKey ? ' active' : ''}" data-key="${k}">${fsLabels[k]}</button>`
+    ).join('');
+    host.appendChild(fsModels);
+    fsModels.querySelectorAll('.fs-model-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const outer = document.querySelector(`.anatomy-tabs .tab[data-key="${btn.dataset.key}"]`);
+        if (outer) outer.click(); else buildModel(btn.dataset.key);
       });
-    }
+    });
 
     // Reset Camera Button
     const resetBtn = document.createElement('button');
     resetBtn.className = 'fs-btn';
+    resetBtn.style.top = '12px';
     resetBtn.style.right = '56px';
     resetBtn.innerHTML = '↺';
     resetBtn.title = 'Скинути камеру';
-    resetBtn.addEventListener('click', () => { 
-        controls.autoRotate = true;
-        autoFrame(); 
-    });
+    resetBtn.addEventListener('click', () => { controls.autoRotate = true; autoFrame(); });
     host.appendChild(resetBtn);
 
-    // Кнопка запуску forward-pass
-    const playBtn = document.createElement('button');
-    playBtn.id = 'playFlowBtn';
-    playBtn.className = 'flow-btn';
-    playBtn.innerHTML = '▶ Запустити прохід';
-    playBtn.style.right = '100px';
-    playBtn.title = 'Показати, як дані проходять крізь мережу';
-    host.appendChild(playBtn);
-    playBtn.addEventListener('click', () => {
-      if (flowState && flowState.active) stopFlow();
-      else startFlow();
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        if (modalEl && modalEl.classList.contains('open')) { closeModal(); return; }
+        if (host.classList.contains('fullscreen')) exitFullscreen();
+        return;
+      }
+      if (hostInView() && !(modalEl && modalEl.classList.contains('open'))) {
+        if (e.key === 'ArrowRight') { e.preventDefault(); walkNext(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); walkPrev(); }
+        else if (e.key === ' ' || e.code === 'Space') { e.preventDefault(); walkToggle(); }
+      }
     });
+
+    const panel = document.createElement('div');
+    panel.className = 'walk-panel';
+    panel.innerHTML = `
+      <div class="walk-steps" id="walkSteps"></div>
+      <div class="walk-bar">
+        <button id="walkPrevBtn" class="walk-ctrl" title="Попередній крок (←)">◀</button>
+        <button id="walkPlayBtn" class="walk-ctrl walk-main" title="Запустити прогін (Пробіл)">▶ Прогін</button>
+        <button id="walkNextBtn" class="walk-ctrl" title="Наступний крок (→)">▶</button>
+        <div class="walk-progress"><div id="walkBar" class="walk-progress-fill"></div></div>
+      </div>
+      <div id="walkLabel" class="walk-label">Крок 0 / 0</div>`;
+    host.appendChild(panel);
+    document.getElementById('walkPrevBtn').addEventListener('click', walkPrev);
+    document.getElementById('walkNextBtn').addEventListener('click', walkNext);
+    document.getElementById('walkPlayBtn').addEventListener('click', walkToggle);
 
     const hud = document.createElement('div');
     hud.id = 'flowHud';
     hud.className = 'flow-hud';
     host.appendChild(hud);
+
+    buildModal();
 
     window.addEventListener('resize', onResize);
     if (window.ResizeObserver) new ResizeObserver(onResize).observe(host);
@@ -194,7 +231,7 @@
     currentKey = key;
     if (modelGroup) { scene.remove(modelGroup); disposeGroup(modelGroup); }
     modelGroup = new THREE.Group();
-    blockMeshes = []; selectedMesh = null; hoveredMesh = null;
+    blockMeshes = []; selectedMesh = null; hoveredMesh = null; blockLabels = [];
     if (!glowMesh) createGlowMesh(); else glowMesh.visible = false;
     clearExplosion(); 
     resetFlowState(); 
@@ -237,21 +274,26 @@
     }
 
     data.blocks.forEach(b => {
-      if (b.linkTo && centersMap[b.id] && centersMap[b.linkTo]) {
-        const p1 = centersMap[b.id], p2 = centersMap[b.linkTo];
-        const dir = new THREE.Vector3().subVectors(p2, p1);
-        const len = dir.length() - (b.w * UNIT) / 2 - 0.2;
-        dir.normalize();
-        const start = p1.clone().add(dir.clone().multiplyScalar((b.w * UNIT) / 2));
-        const color = ANATOMY_CATEGORIES[b.cat].color;
-        const arrow = new THREE.ArrowHelper(dir, start, len, color, 0.4, 0.25);
-        modelGroup.add(arrow);
-      }
+      try {
+        if (b.linkTo && centersMap[b.id] && centersMap[b.linkTo]) {
+          const p1 = centersMap[b.id], p2 = centersMap[b.linkTo];
+          const dir = new THREE.Vector3().subVectors(p2, p1);
+          const len = dir.length() - (b.w * UNIT) / 2 - 0.2;
+          dir.normalize();
+          const start = p1.clone().add(dir.clone().multiplyScalar((b.w * UNIT) / 2));
+          const cat = ANATOMY_CATEGORIES[b.cat];
+          const color = cat ? cat.color : 0x4f8cff;
+          modelGroup.add(new THREE.ArrowHelper(dir, start, len, color, 0.4, 0.25));
+        }
+      } catch (err) { console.warn('anatomy link skip', b.id, err); }
     });
 
     scene.add(modelGroup);
     createPulses();
-    document.getElementById('anatomyTabs') && updateSummary(data);
+    buildWalkSteps();
+    resetWalk();
+    if (document.getElementById('anatomyTabs')) updateSummary(data);
+    document.querySelectorAll('.fs-model-btn').forEach(b => b.classList.toggle('active', b.dataset.key === currentKey));
     autoFrame();
   }
 
@@ -262,7 +304,7 @@
     
     const userData = { block: b, baseEmissive: 0.18 };
     const stacks = b.stack || 1;
-    const gap = 0.08;
+    const gap = 0.14;
     const h = (H - gap * (stacks - 1)) / stacks;
 
     for (let i = 0; i < stacks; i++) {
@@ -285,7 +327,7 @@
 
       const edges = new THREE.LineSegments(
         new THREE.EdgesGeometry(geo),
-        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.45 })
+        new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 })
       );
       mesh.add(edges);
       group.add(mesh);
@@ -293,8 +335,9 @@
     }
 
     const label = makeLabel(b.title);
-    label.position.set(0, H / 2 + 0.65, 0);
+    label.position.set(0, H / 2 + 0.85, 0);
     group.add(label);
+    blockLabels.push({ label, blockId: b.id, baseY: H / 2 + 0.85 });
     modelGroup.add(group);
   }
 
@@ -348,12 +391,47 @@
   }
 
   function onPick(ev) {
+    downX = ev.clientX; downY = ev.clientY;
     const rect = renderer.domElement.getBoundingClientRect();
     pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
     const hits = raycaster.intersectObjects(blockMeshes, false);
     if (hits.length) select(hits[0].object);
+  }
+
+  function onPointerUp(ev) {
+    if (Math.abs(ev.clientX - downX) + Math.abs(ev.clientY - downY) > 6) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+    pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointer, camera);
+    if (microMeshes.length) {
+      const mh = raycaster.intersectObjects(microMeshes, false);
+      if (mh.length) {
+        const u = mh[0].object.userData;
+        openDetailPopover(u.microDetail, u.parentBlock, ev);
+        return;
+      }
+    }
+    const hits = raycaster.intersectObjects(blockMeshes, false);
+    if (hits.length) openBlockModal(hits[0].object.userData.block, ev);
+  }
+
+  function openDetailPopover(det, parent, ev) {
+    if (!modalEl || !det) return;
+    const dc = '#' + ((det.color || 0xffffff) >>> 0).toString(16).padStart(6, '0');
+    const pName = parent ? parent.title : '';
+    document.getElementById('blockModalBody').innerHTML = `
+      <div class="bm-head">
+        <span class="bm-cat" style="border-color:${dc};color:${dc}">Мікрокрок</span>
+        <h3>${det.title}</h3>
+      </div>
+      <p class="bm-lead">Внутрішня операція блоку <b>${pName}</b>.</p>
+      <div class="bm-field"><div class="bm-label">🧩 Контекст</div>
+        <p>Один із під-кроків, на які розкладається блок «${pName}» у детальному 3D-перегляді.</p></div>`;
+    modalEl.classList.add('open');
+    positionPopover(ev);
   }
 
   function select(mesh) {
@@ -380,8 +458,9 @@
     const cat = ANATOMY_CATEGORIES[b.cat];
     const t = document.getElementById('blockTitle');
     const d = document.getElementById('blockDesc');
+    const infoPanel = document.getElementById('blockInfo');
     
-    document.getElementById('blockInfo').classList.add('updating');
+    if (infoPanel) infoPanel.classList.add('updating');
     
     setTimeout(() => {
       t.textContent = b.title;
@@ -406,7 +485,7 @@
       }
 
       d.innerHTML = htmlDesc;
-      document.getElementById('blockInfo').classList.remove('updating');
+      if (infoPanel) infoPanel.classList.remove('updating');
     }, 180);
 
     const meta = document.getElementById('blockMeta');
@@ -430,6 +509,7 @@
       disposeGroup(explodedGroup);
       explodedGroup = null;
       explodingMeshes = [];
+      microMeshes = [];
       if (glowMesh) glowMesh.visible = false;
       if (selectedMesh) showInfo(selectedMesh.userData.block);
     }
@@ -468,6 +548,8 @@
       slice.add(lbl);
       slice.position.set(0, 0, 0); 
       const targetY = 1.4 + i * 1.0;
+      slice.userData = { microDetail: det, parentBlock: b };
+      microMeshes.push(slice);
       explodedGroup.add(slice);
       explodingMeshes.push({ mesh: slice, edges, lbl, targetY, currentY: 0, vel: 0 });
     });
@@ -498,9 +580,22 @@
     });
   }
 
+  function makePulse(color) {
+    const g = new THREE.Group();
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), new THREE.MeshBasicMaterial({ color })));
+    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 16), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false })));
+    for (let i = 1; i <= 3; i++) {
+        const tail = new THREE.Mesh(new THREE.SphereGeometry(0.25 - i*0.05, 8, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2 - i*0.05 }));
+        tail.position.x = -i * 0.4;
+        g.add(tail);
+    }
+    g.visible = false; modelGroup.add(g); return g;
+  }
+  function createPulses() { pulseMesh = makePulse(0x7be0ff); gpsPulseMesh = gpsFlow.length ? makePulse(0xb07cff) : null; }
   function resetFlowState() {
     flowState = { active: false, lanes: [], holdFrames: 0 };
-    const btn = document.getElementById('playFlowBtn'); if (btn) btn.innerHTML = '▶ Запустити прохід';
+    pulseMesh = null; gpsPulseMesh = null;
+    const btn = document.getElementById('walkPlayBtn'); if (btn) btn.innerHTML = '▶ Прогін';
     const hud = document.getElementById('flowHud'); if (hud) hud.classList.remove('show');
   }
   function setHud(block) {
@@ -512,21 +607,23 @@
     if (!mainFlow.length || !pulseMesh) return;
     clearExplosion(); if (selectedMesh) resetMeshVisual(selectedMesh); selectedMesh = null;
     clearLights(); controls.autoRotate = false;
-    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: true }];
-    if (gpsFlow.length && gpsPulseMesh) lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: false });
+    const SPEED = 0.016;
+    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: true }];
+    if (gpsFlow.length && gpsPulseMesh) lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: false });
     lanes.forEach(lane => {
       lane.pulse.visible = true; lane.pulse.position.copy(lane.path[0].pos);
       lightBlock(lane.path[0].id, true);
       if (lane.primary) { showInfo(lane.path[0].block); setHud(lane.path[0].block); }
     });
     flowState = { active: true, lanes, holdFrames: 0 };
-    const btn = document.getElementById('playFlowBtn'); if (btn) btn.innerHTML = '⏸ Зупинити';
+    walkIndex = 0; updateWalkPanel();
+    const btn = document.getElementById('walkPlayBtn'); if (btn) btn.innerHTML = '⏸ Пауза';
   }
 
   function stopFlow() {
     if (pulseMesh) pulseMesh.visible = false; if (gpsPulseMesh) gpsPulseMesh.visible = false;
     clearLights(); if (flowState) { flowState.active = false; flowState.lanes = []; }
-    const btn = document.getElementById('playFlowBtn'); if (btn) btn.innerHTML = '▶ Запустити прохід';
+    const btn = document.getElementById('walkPlayBtn'); if (btn) btn.innerHTML = '▶ Прогін';
     const hud = document.getElementById('flowHud'); if (hud) hud.classList.remove('show');
   }
 
@@ -536,17 +633,23 @@
     flowState.lanes.forEach(lane => {
       const path = lane.path;
       if (!lane.done) {
-        allDone = false; lane.t += lane.speed;
-        if (lane.t >= 1) {
-          lane.t = 0; lane.seg++;
-          if (lane.seg >= path.length) { lane.done = true; return; }
-          const node = path[lane.seg]; lightBlock(node.id, true);
-          if (lane.primary) { showInfo(node.block); setHud(node.block); }
+        allDone = false;
+        if (lane.pause > 0) { lane.pause--; } else {
+          lane.t += lane.speed;
+          if (lane.t >= 1) {
+            lane.t = 0; lane.seg++;
+            if (lane.seg >= path.length) { lane.done = true; return; }
+            const node = path[lane.seg]; lightBlock(node.id, true);
+            lane.pause = 24;
+            if (lane.primary) { showInfo(node.block); setHud(node.block); }
+          }
         }
       }
       const i = Math.min(lane.seg, path.length - 1), j = Math.min(lane.seg + 1, path.length - 1);
       lane.pulse.position.lerpVectors(path[i].pos, path[j].pos, lane.t);
     });
+    const primary = flowState.lanes.find(l => l.primary);
+    if (primary) { walkIndex = Math.min(primary.seg, mainFlow.length - 1); updateWalkPanel(); }
     if (allDone && ++flowState.holdFrames > 90) stopFlow();
   }
 
@@ -587,6 +690,90 @@
     document.getElementById('blockMeta').innerHTML = '<span class="chip">💡 Оберіть блок для огляду</span>';
   }
 
+  function buildWalkSteps() {
+    const wrap = document.getElementById('walkSteps'); if (!wrap) return;
+    wrap.innerHTML = mainFlow.map((n, i) =>
+      `<button class="walk-step-chip" data-i="${i}" title="${n.block.title}">
+         <span class="wsc-num">${i + 1}</span><span class="wsc-name">${n.block.title}</span>
+       </button>`
+    ).join('');
+    wrap.querySelectorAll('.walk-step-chip').forEach(btn => {
+      btn.addEventListener('click', () => walkGoto(parseInt(btn.dataset.i, 10)));
+    });
+  }
+  function resetWalk() { walkIndex = -1; updateWalkPanel(); }
+  function updateWalkPanel() {
+    const n = mainFlow.length;
+    const label = document.getElementById('walkLabel'), bar = document.getElementById('walkBar');
+    if (label) label.textContent = walkIndex < 0 ? `Крок 0 / ${n} — натисніть «Прогін»` : `Крок ${walkIndex + 1} / ${n} — ${mainFlow[walkIndex].block.title}`;
+    if (bar) bar.style.width = (walkIndex < 0 ? 0 : ((walkIndex + 1) / n) * 100) + '%';
+    const chips = document.querySelectorAll('.walk-step-chip');
+    chips.forEach((c, i) => c.classList.toggle('active', i === walkIndex));
+    if (walkIndex >= 0 && chips[walkIndex]) chips[walkIndex].scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
+  }
+  function walkGoto(i) {
+    if (!mainFlow.length || !pulseMesh) return;
+    if (flowState && flowState.active) stopFlow();
+    clearExplosion();
+    i = Math.max(0, Math.min(mainFlow.length - 1, i)); walkIndex = i;
+    controls.autoRotate = false; clearLights();
+    const node = mainFlow[i]; lightBlock(node.id, true);
+    pulseMesh.visible = true; pulseMesh.position.copy(node.pos);
+    if (gpsPulseMesh) gpsPulseMesh.visible = false;
+    showInfo(node.block); setHud(node.block); updateWalkPanel();
+  }
+  function walkNext() { walkGoto(walkIndex < 0 ? 0 : walkIndex + 1); }
+  function walkPrev() { walkGoto(walkIndex < 0 ? 0 : walkIndex - 1); }
+  function walkToggle() { (flowState && flowState.active) ? stopFlow() : startFlow(); }
+
+  function buildModal() {
+    modalEl = document.createElement('div');
+    modalEl.className = 'block-modal';
+    modalEl.innerHTML = `<div class="block-modal-backdrop" data-close></div><div class="block-modal-card" role="dialog" aria-modal="true"><span class="block-modal-arrow"></span><button class="block-modal-close" data-close title="Закрити (Esc)">✕</button><div class="block-modal-body" id="blockModalBody"></div></div>`;
+    host.appendChild(modalEl);
+    modalEl.addEventListener('click', (e) => {
+      if (e.target.closest('[data-close]')) { closeModal(); return; }
+      const ex = e.target.closest('[data-explode]');
+      if (ex) { const mesh = meshById(ex.dataset.explode); closeModal(); if (mesh) { select(mesh); explodeBlock(mesh); } }
+    });
+    let drag = null; const getCard = () => modalEl.querySelector('.block-modal-card');
+    modalEl.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-close]') || e.target.closest('[data-explode]')) return;
+      const head = e.target.closest('.bm-head'); if (!head) return;
+      const c = getCard(); if (!c) return;
+      const arrow = modalEl.querySelector('.block-modal-arrow'); if (arrow) arrow.style.display = 'none';
+      drag = { sx: e.clientX, sy: e.clientY, left: c.offsetLeft, top: c.offsetTop, rect: host.getBoundingClientRect(), w: c.offsetWidth, h: c.offsetHeight };
+      head.style.cursor = 'grabbing'; e.preventDefault();
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag) return; const c = getCard(); if (!c) return;
+      let left = drag.left + (e.clientX - drag.sx); let top = drag.top + (e.clientY - drag.sy);
+      left = Math.max(8, Math.min(left, drag.rect.width - drag.w - 8)); top = Math.max(8, Math.min(top, drag.rect.height - drag.h - 8));
+      c.style.left = left + 'px'; c.style.top = top + 'px';
+    });
+    window.addEventListener('pointerup', () => { if (drag) { const h = modalEl.querySelector('.bm-head'); if (h) h.style.cursor = 'grab'; } drag = null; });
+  }
+  function meshById(id) { return blockMeshes.find(m => m.userData.block.id === id) || null; }
+  function openBlockModal(b, ev) {
+    if (!modalEl) return; const cat = ANATOMY_CATEGORIES[b.cat]; const hex = '#' + cat.color.toString(16).padStart(6, '0');
+    const chips = (b.chips || []).map(c => `<span class="chip">${c}</span>`).join('');
+    const micro = (b.details || []).map(d => { const dc = '#' + (d.color || cat.color).toString(16).padStart(6, '0'); return `<li><span class="micro-dot" style="background:${dc}"></span>${d.title}</li>`; }).join('');
+    const body = document.getElementById('blockModalBody');
+    body.innerHTML = `<div class="bm-head"><span class="bm-cat" style="border-color:${hex};color:${hex}">${cat.label}</span><h3>${b.title}</h3></div><p class="bm-lead">${b.desc || ''}</p>${b.purpose ? `<div class="bm-field"><div class="bm-label">🎯 Для чого</div><p>${b.purpose}</p></div>` : ''}${b.how ? `<div class="bm-field"><div class="bm-label">⚙️ Як працює</div><p>${b.how}</p></div>` : ''}<div class="bm-grid"><div class="bm-chip"><span class="k">Форма виходу</span><span class="v">${b.shape || '—'}</span></div><div class="bm-chip"><span class="k">Категорія</span><span class="v">${cat.label}</span></div></div>${chips ? `<div class="bm-tags">${chips}</div>` : ''}${micro ? `<div class="bm-field"><div class="bm-label">🔬 Мікроархітектура</div><ul class="bm-micro">${micro}</ul></div>` : ''}${(b.details && b.details.length) ? `<button class="bm-explode" data-explode="${b.id}">🧩 Показати у 3D</button>` : ''}`;
+    modalEl.classList.add('open'); positionPopover(ev);
+  }
+  function positionPopover(ev) {
+    const card = modalEl.querySelector('.block-modal-card'), arrow = modalEl.querySelector('.block-modal-arrow'); if (!card) return;
+    const rect = host.getBoundingClientRect(); const px = ev ? ev.clientX - rect.left : rect.width / 2; const py = ev ? ev.clientY - rect.top : rect.height / 2;
+    const cw = Math.min(330, rect.width - 24); card.style.width = cw + 'px'; card.style.left = '-9999px'; card.style.top = '0px';
+    const ch = Math.min(card.offsetHeight, rect.height - 24); let side, left;
+    if (px + 20 + cw <= rect.width - 8) { side = 'left'; left = px + 20; } else { side = 'right'; left = px - 20 - cw; }
+    left = Math.max(8, Math.min(left, rect.width - cw - 8)); let top = Math.max(8, Math.min(py - 46, rect.height - ch - 8));
+    card.style.left = left + 'px'; card.style.top = top + 'px';
+    if (arrow) { const ay = Math.max(16, Math.min(py - top, ch - 16)); arrow.style.top = ay + 'px'; arrow.className = 'block-modal-arrow ' + side; }
+  }
+  function closeModal() { if (modalEl) modalEl.classList.remove('open'); }
+
   function animate() {
     requestAnimationFrame(animate);
     controls.update();
@@ -605,6 +792,14 @@
         if (item.mesh.material.opacity < 0.9) {
           item.mesh.material.opacity += 0.08; item.edges.material.opacity += 0.08; item.lbl.material.opacity += 0.08;
         }
+      });
+    }
+
+    if (blockLabels.length) {
+      const exId = explodedGroup ? explodedGroup.userData.blockId : null;
+      blockLabels.forEach(it => {
+        const target = (it.blockId === exId) ? -(H / 2) - 0.5 : it.baseY;
+        it.label.position.y += (target - it.label.position.y) * 0.14;
       });
     }
 
@@ -639,7 +834,6 @@
         requestAnimationFrame(step);
     };
     step();
-    controls.autoRotate = true;
   }
 
   function onResize() {
@@ -648,13 +842,33 @@
     renderer.setSize(W, Ht);
   }
 
+  function enterFullscreen() {
+    host.classList.add('fullscreen');
+    document.body.classList.add('anatomy-fs');
+    const b = document.getElementById('fullscreenBtn');
+    if (b) { b.innerHTML = '✕'; b.title = 'Закрити'; }
+    requestAnimationFrame(onResize);
+  }
+  function exitFullscreen() {
+    if (!host.classList.contains('fullscreen')) return;
+    host.classList.remove('fullscreen');
+    document.body.classList.remove('anatomy-fs');
+    const b = document.getElementById('fullscreenBtn');
+    if (b) { b.innerHTML = '⛶'; b.title = 'На весь екран'; }
+    stopFlow();
+    requestAnimationFrame(onResize);
+  }
+  function hostInView() {
+    if (host.classList.contains('fullscreen')) return true;
+    const r = host.getBoundingClientRect();
+    return r.top < window.innerHeight * 0.5 && r.bottom > window.innerHeight * 0.5;
+  }
   function disposeGroup(g) {
     g.traverse(o => {
       if (o.geometry) o.geometry.dispose();
       if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
     });
   }
-
   function buildTabs() {
     const tabs = document.getElementById('anatomyTabs'); if(!tabs) return;
     const labels = { streetclip: 'StreetCLIP', baseline: 'Baseline CNN', geoclip: 'GeoCLIP' };
@@ -672,29 +886,6 @@
   buildTabs(); buildLegend(); init();
 
   window.showAnatomy = function (key) {
-    const btn = document.querySelector(`.tab[data-key="${key}"]`);
-    if (btn) btn.click();
-  };
-})();
-    tabs.innerHTML = Object.keys(labels).map(k =>
-      `<button class="tab${k === currentKey ? ' active' : ''}" data-key="${k}">${labels[k]}</button>`
-    ).join('');
-    tabs.querySelectorAll('.tab').forEach(btn => {
-      btn.addEventListener('click', () => {
-        tabs.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active'); controls.autoRotate = true; buildModel(btn.dataset.key);
-      });
-    });
-  }
-
-  buildTabs(); buildLegend(); init();
-
-  window.showAnatomy = function (key) {
-    const btn = document.querySelector(`.tab[data-key="${key}"]`);
-    if (btn) btn.click();
-  };
-})();
-function (key) {
     const btn = document.querySelector(`.tab[data-key="${key}"]`);
     if (btn) btn.click();
   };
