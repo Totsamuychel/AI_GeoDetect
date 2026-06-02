@@ -581,72 +581,25 @@
     });
   }
 
-  function makeDataPacket(type) {
-    const group = new THREE.Group();
-    
-    const imgCanvas = document.createElement('canvas');
-    imgCanvas.width = 128; imgCanvas.height = 128;
-    const ctx = imgCanvas.getContext('2d');
-    ctx.fillStyle = 'rgba(30, 40, 60, 0.9)';
-    ctx.beginPath(); ctx.roundRect(10, 10, 108, 108, 16); ctx.fill();
-    ctx.fillStyle = type === 'gps' ? '#b07cff' : '#4f8cff';
-    ctx.font = '54px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(type === 'gps' ? '📍' : '🖼️', 64, 68);
-    ctx.strokeStyle = type === 'gps' ? '#b07cff' : '#4f8cff'; 
-    ctx.lineWidth = 4; ctx.stroke();
-    
-    const imgTex = new THREE.CanvasTexture(imgCanvas);
-    const imgMat = new THREE.SpriteMaterial({ map: imgTex, transparent: true, depthTest: false });
-    const imgSprite = new THREE.Sprite(imgMat);
-    imgSprite.scale.set(1.2, 1.2, 1);
-    group.add(imgSprite);
-
-    const cubeGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
-    const cubeMat = new THREE.MeshPhysicalMaterial({
-        color: type === 'gps' ? 0xb07cff : 0x7be0ff,
-        emissive: type === 'gps' ? 0xb07cff : 0x7be0ff,
-        emissiveIntensity: 0.8,
-        transparent: true, opacity: 0,
-        roughness: 0.1, transmission: 0.5
-    });
-    const cube = new THREE.Mesh(cubeGeo, cubeMat);
-    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(cubeGeo), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
-    cube.add(edges);
-    group.add(cube);
-
-    const resLbl = makeLabel(type === 'gps' ? 'GPS Ознаки' : 'Результат', 36, true);
-    resLbl.material.opacity = 0;
-    group.add(resLbl);
-
-    group.userData = { imgSprite, cube, edges, resLbl, type };
-    group.visible = false;
-    modelGroup.add(group);
-    return group;
-  }
-
-  function createPulses() { pulseMesh = makeDataPacket('image'); gpsPulseMesh = gpsFlow.length ? makeDataPacket('gps') : null; }
-  
   function resetFlowState() {
     flowState = { active: false, lanes: [], holdFrames: 0 };
-    pulseMesh = null; gpsPulseMesh = null;
     const btn = document.getElementById('walkPlayBtn'); if (btn) btn.innerHTML = '▶ Прогін';
     const hud = document.getElementById('flowHud'); if (hud) hud.classList.remove('show');
   }
+
   function setHud(block) {
     const hud = document.getElementById('flowHud'); if (!hud) return;
     hud.innerHTML = `${block.title} · <b style="color:var(--accent-2)">${block.shape || ''}</b>`; hud.classList.add('show');
   }
 
   function startFlow() {
-    if (!mainFlow.length || !pulseMesh) return;
+    if (!mainFlow.length) return;
     clearExplosion(); if (selectedMesh) resetMeshVisual(selectedMesh); selectedMesh = null;
     clearLights(); controls.autoRotate = false;
     const SPEED = 0.016;
-    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: true }];
-    if (gpsFlow.length && gpsPulseMesh) lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: false });
+    const lanes = [{ path: mainFlow, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: true }];
+    if (gpsFlow.length) lanes.push({ path: gpsFlow, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: false });
     lanes.forEach(lane => {
-      lane.pulse.visible = true; lane.pulse.position.copy(lane.path[0].pos);
       lightBlock(lane.path[0].id, true);
       if (lane.primary) { showInfo(lane.path[0].block); setHud(lane.path[0].block); }
     });
@@ -656,7 +609,6 @@
   }
 
   function stopFlow() {
-    if (pulseMesh) pulseMesh.visible = false; if (gpsPulseMesh) gpsPulseMesh.visible = false;
     clearLights(); if (flowState) { flowState.active = false; flowState.lanes = []; }
     const btn = document.getElementById('walkPlayBtn'); if (btn) btn.innerHTML = '▶ Прогін';
     const hud = document.getElementById('flowHud'); if (hud) hud.classList.remove('show');
@@ -667,7 +619,6 @@
     let allDone = true;
     flowState.lanes.forEach(lane => {
       const path = lane.path;
-      const pkt = lane.pulse.userData;
       if (!lane.done) {
         allDone = false;
         if (lane.pause > 0) { lane.pause--; } else {
@@ -680,37 +631,6 @@
             if (lane.primary) { showInfo(node.block); setHud(node.block); }
           }
         }
-      }
-      const i = Math.min(lane.seg, path.length - 1), j = Math.min(lane.seg + 1, path.length - 1);
-      lane.pulse.position.lerpVectors(path[i].pos, path[j].pos, lane.t);
-
-      // Animation logic
-      const totalSegs = path.length - 1;
-      const progress = totalSegs > 0 ? (Math.min(lane.seg, totalSegs) + (lane.done ? 0 : lane.t)) / totalSegs : 1;
-
-      pkt.cube.rotation.x += 0.04;
-      pkt.cube.rotation.y += 0.04;
-
-      if (progress < 0.15) {
-          const localT = progress / 0.15;
-          pkt.imgSprite.material.opacity = 1 - localT;
-          pkt.cube.material.opacity = localT * 0.8;
-          pkt.edges.material.opacity = localT * 0.5;
-          pkt.resLbl.material.opacity = 0;
-          pkt.cube.scale.setScalar(localT);
-      } else if (progress < 0.85) {
-          pkt.imgSprite.material.opacity = 0;
-          pkt.cube.material.opacity = 0.8 + Math.sin(Date.now() * 0.01) * 0.2;
-          pkt.edges.material.opacity = 0.5;
-          pkt.resLbl.material.opacity = 0;
-          pkt.cube.scale.setScalar(1);
-      } else {
-          const localT = (progress - 0.85) / 0.15;
-          pkt.cube.material.opacity = (1 - localT) * 0.8;
-          pkt.edges.material.opacity = (1 - localT) * 0.5;
-          pkt.resLbl.material.opacity = localT;
-          pkt.resLbl.position.y = 0.4 + localT * 0.6;
-          pkt.cube.scale.setScalar(1 - localT);
       }
     });
     const primary = flowState.lanes.find(l => l.primary);
