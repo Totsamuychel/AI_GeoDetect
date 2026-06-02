@@ -19,6 +19,7 @@
   // Змінні для ефекту розпаду (explode)
   let explodedGroup = null;
   let explodingMeshes = [];
+  let microMeshes = [];        // мікро-блоки (деталі) для кліку/поповера
 
   // Forward-pass анімація: упорядкований шлях потоку, «імпульси» та стан
   let mainFlow = [], gpsFlow = [];
@@ -97,27 +98,39 @@
 
     // Fullscreen toggle
     const fsBtn = document.getElementById('fullscreenBtn');
-    if (fsBtn) {
-      fsBtn.addEventListener('click', () => {
-        host.classList.toggle('fullscreen');
-        const isFS = host.classList.contains('fullscreen');
-        fsBtn.innerHTML = isFS ? '✕' : '⛶';
-        fsBtn.title = isFS ? 'Закрити' : 'На весь екран';
-        if (!isFS) stopFlow(); // Зупиняємо forward-pass при ВИХОДІ з повноекранного режиму
-        onResize();
+    if (fsBtn) fsBtn.addEventListener('click', () => {
+      host.classList.contains('fullscreen') ? exitFullscreen() : enterFullscreen();
+    });
+
+    // Явна кнопка виходу (видима лише у повноекранному режимі)
+    const exitBtn = document.createElement('button');
+    exitBtn.id = 'fsExitBtn';
+    exitBtn.className = 'fs-exit';
+    exitBtn.innerHTML = '✕ Вийти';
+    exitBtn.title = 'Вийти з повного екрана (Esc)';
+    exitBtn.addEventListener('click', exitFullscreen);
+    host.appendChild(exitBtn);
+
+    // Вибір моделі прямо у повноекранному режимі (зовнішні вкладки приховані)
+    const fsModels = document.createElement('div');
+    fsModels.className = 'fs-models';
+    const fsLabels = { streetclip: 'StreetCLIP', baseline: 'Baseline CNN', geoclip: 'GeoCLIP' };
+    fsModels.innerHTML = Object.keys(fsLabels).map(k =>
+      `<button class="fs-model-btn${k === currentKey ? ' active' : ''}" data-key="${k}">${fsLabels[k]}</button>`
+    ).join('');
+    host.appendChild(fsModels);
+    fsModels.querySelectorAll('.fs-model-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const outer = document.querySelector(`.anatomy-tabs .tab[data-key="${btn.dataset.key}"]`);
+        if (outer) outer.click(); else buildModel(btn.dataset.key);  // синхронізуємо із зовнішніми вкладками
       });
-    }
+    });
 
     // Клавіатура: Esc — закрити вікно / вийти з повного екрана; стрілки/пробіл — прогін
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') {
         if (modalEl && modalEl.classList.contains('open')) { closeModal(); return; }
-        if (host.classList.contains('fullscreen')) {
-          host.classList.remove('fullscreen');
-          if (fsBtn) { fsBtn.innerHTML = '⛶'; fsBtn.title = 'На весь екран'; }
-          stopFlow();
-          onResize();
-        }
+        if (host.classList.contains('fullscreen')) exitFullscreen();
         return;
       }
       if (hostInView() && !(modalEl && modalEl.classList.contains('open'))) {
@@ -238,6 +251,9 @@
     buildWalkSteps(); // список кроків для меню «Прогін»
     resetWalk();
     document.getElementById('anatomyTabs') && updateSummary(data);
+    // Синхронізуємо підсвітку fs-меню вибору моделі
+    document.querySelectorAll('.fs-model-btn').forEach(b =>
+      b.classList.toggle('active', b.dataset.key === currentKey));
     autoFrame();
   }
 
@@ -309,8 +325,34 @@
     pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
     pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
     raycaster.setFromCamera(pointer, camera);
+    // Спершу — мікро-блоки (вони попереду), потім звичайні блоки.
+    if (microMeshes.length) {
+      const mh = raycaster.intersectObjects(microMeshes, false);
+      if (mh.length) {
+        const u = mh[0].object.userData;
+        openDetailPopover(u.microDetail, u.parentBlock, ev);
+        return;
+      }
+    }
     const hits = raycaster.intersectObjects(blockMeshes, false);
     if (hits.length) openBlockModal(hits[0].object.userData.block, ev);
+  }
+
+  // Поповер для мікро-блоку (деталі розкладеного блоку)
+  function openDetailPopover(det, parent, ev) {
+    if (!modalEl || !det) return;
+    const dc = '#' + ((det.color || 0xffffff) >>> 0).toString(16).padStart(6, '0');
+    const pName = parent ? parent.title : '';
+    document.getElementById('blockModalBody').innerHTML = `
+      <div class="bm-head">
+        <span class="bm-cat" style="border-color:${dc};color:${dc}">Мікрокрок</span>
+        <h3>${det.title}</h3>
+      </div>
+      <p class="bm-lead">Внутрішня операція блоку <b>${pName}</b>.</p>
+      <div class="bm-field"><div class="bm-label">🧩 Контекст</div>
+        <p>Один із під-кроків, на які розкладається блок «${pName}» у детальному 3D-перегляді.</p></div>`;
+    modalEl.classList.add('open');
+    positionPopover(ev);
   }
 
   function select(mesh) {
@@ -386,6 +428,7 @@
       disposeGroup(explodedGroup);
       explodedGroup = null;
       explodingMeshes = [];
+      microMeshes = [];
       // Відновлюємо опис для вибраного блоку
       if (selectedMesh) showInfo(selectedMesh.userData.block);
     }
@@ -446,6 +489,8 @@
       // Цільова позиція (вгорі)
       const targetY = 1.4 + i * 1.0;
 
+      slice.userData = { microDetail: det, parentBlock: b };
+      microMeshes.push(slice);
       explodedGroup.add(slice);
       explodingMeshes.push({ mesh: slice, edges, lbl, targetY });
     });
@@ -517,9 +562,10 @@
     clearLights();
     controls.autoRotate = false;
 
-    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: true }];
+    const SPEED = 0.016;   // ~2.5× повільніше за попереднє (0.04)
+    const lanes = [{ path: mainFlow, pulse: pulseMesh, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: true }];
     if (gpsFlow.length && gpsPulseMesh) {
-      lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: 0.04, primary: false });
+      lanes.push({ path: gpsFlow, pulse: gpsPulseMesh, seg: 0, t: 0, done: false, speed: SPEED, pause: 0, primary: false });
     }
     lanes.forEach(lane => {
       lane.pulse.visible = true;
@@ -552,14 +598,19 @@
       const path = lane.path;
       if (!lane.done) {
         allDone = false;
-        lane.t += lane.speed;
-        if (lane.t >= 1) {
-          lane.t = 0;
-          lane.seg++;
-          const node = path[lane.seg];
-          lightBlock(node.id, true);
-          if (lane.primary) { showInfo(node.block); setHud(node.block); }
-          if (lane.seg >= path.length - 1) lane.done = true;
+        if (lane.pause > 0) {
+          lane.pause--;                       // коротка пауза на блоці, щоб встигнути прочитати
+        } else {
+          lane.t += lane.speed;
+          if (lane.t >= 1) {
+            lane.t = 0;
+            lane.seg++;
+            const node = path[lane.seg];
+            lightBlock(node.id, true);
+            lane.pause = 24;                  // ~0.4 с зупинки на кожному блоці
+            if (lane.primary) { showInfo(node.block); setHud(node.block); }
+            if (lane.seg >= path.length - 1) lane.done = true;
+          }
         }
       }
       const i = Math.min(lane.seg, path.length - 1);
@@ -651,6 +702,35 @@
         closeModal();
         if (mesh) { select(mesh); explodeBlock(mesh); }
       }
+    });
+
+    // Перетягування поповера за заголовок (.bm-head)
+    let drag = null;
+    const getCard = () => modalEl.querySelector('.block-modal-card');
+    modalEl.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-close]') || e.target.closest('[data-explode]')) return;
+      const head = e.target.closest('.bm-head');
+      if (!head) return;
+      const c = getCard(); if (!c) return;
+      const arrow = modalEl.querySelector('.block-modal-arrow');
+      if (arrow) arrow.style.display = 'none';   // після перетягу стрілка вже не вказує на блок
+      drag = { sx: e.clientX, sy: e.clientY, left: c.offsetLeft, top: c.offsetTop,
+               rect: host.getBoundingClientRect(), w: c.offsetWidth, h: c.offsetHeight };
+      head.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const c = getCard(); if (!c) return;
+      let left = drag.left + (e.clientX - drag.sx);
+      let top = drag.top + (e.clientY - drag.sy);
+      left = Math.max(8, Math.min(left, drag.rect.width - drag.w - 8));
+      top = Math.max(8, Math.min(top, drag.rect.height - drag.h - 8));
+      c.style.left = left + 'px'; c.style.top = top + 'px';
+    });
+    window.addEventListener('pointerup', () => {
+      if (drag) { const h = modalEl.querySelector('.bm-head'); if (h) h.style.cursor = 'grab'; }
+      drag = null;
     });
   }
 
@@ -778,6 +858,26 @@
     const W = host.clientWidth, Ht = host.clientHeight || 460;
     camera.aspect = W / Ht; camera.updateProjectionMatrix();
     renderer.setSize(W, Ht);
+  }
+
+  function enterFullscreen() {
+    host.classList.add('fullscreen');
+    // main має z-index:1 і «замикає» fixed-host під липкою шапкою (z50).
+    // Піднімаємо main над шапкою лише на час повного екрана.
+    document.body.classList.add('anatomy-fs');
+    const b = document.getElementById('fullscreenBtn');
+    if (b) { b.innerHTML = '✕'; b.title = 'Закрити'; }
+    requestAnimationFrame(onResize);
+  }
+  function exitFullscreen() {
+    if (!host.classList.contains('fullscreen')) return;
+    host.classList.remove('fullscreen');
+    document.body.classList.remove('anatomy-fs');
+    const b = document.getElementById('fullscreenBtn');
+    if (b) { b.innerHTML = '⛶'; b.title = 'На весь екран'; }
+    stopFlow();
+    // P5: чекаємо reflow, інакше canvas зберігає «повноекранну» висоту й розтягує блок.
+    requestAnimationFrame(onResize);
   }
 
   // Чи секція анатомії зараз у зоні видимості (для керування «прогоном» з клавіатури)
