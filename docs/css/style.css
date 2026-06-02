@@ -190,8 +190,13 @@ main {
 .model-meta { font-size: 12px; color: var(--muted); }
 
 /* ── Anatomy ───────────────────────────────────────────────────────────── */
-.anatomy-tabs { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.anatomy-tabs {
+  display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+}
+.anatomy-tabs::-webkit-scrollbar { display: none; }
 .tab {
+  flex-shrink: 0; white-space: nowrap;
   padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--bg-2); color: var(--muted); cursor: pointer; font-weight: 600;
   font-size: 14px; transition: .18s;
@@ -207,7 +212,8 @@ main {
   background: radial-gradient(120% 120% at 50% 0%, #0e1626, #070b13);
   border: 1px solid var(--border);
 }
-.canvas-host canvas { display: block; }
+/* absolute → canvas не диктує висоту host (інакше після виходу з fullscreen блок «довгий», P5) */
+.canvas-host canvas { display: block; position: absolute; top: 0; left: 0; }
 .canvas-hint {
   position: absolute; left: 12px; bottom: 12px; z-index: 3;
   font-size: 11.5px; color: var(--muted); background: rgba(7,11,19,.7);
@@ -233,11 +239,11 @@ main {
 
 /* HUD з поточною формою тензора під час проходу */
 .flow-hud {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3;
-  font-size: 13px; color: var(--muted); background: rgba(7,11,19,.78);
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999;
+  font-size: 13px; color: var(--muted); background: rgba(7,11,19,.85);
   padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
-  font-variant-numeric: tabular-nums; pointer-events: none;
-  opacity: 0; transition: opacity .25s; max-width: 90%;
+  font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
+  opacity: 0; transition: opacity .25s; max-width: 60%; overflow: hidden; text-overflow: ellipsis;
 }
 .flow-hud.show { opacity: 1; }
 .flow-hud b { color: var(--accent); font-weight: 700; }
@@ -249,7 +255,8 @@ main {
 }
 .canvas-host.fullscreen .fs-btn { top: 16px; bottom: auto; right: 16px; }
 .canvas-host.fullscreen .flow-btn { top: 16px; bottom: auto; right: 60px; }
-.canvas-host.fullscreen .flow-hud { top: 20px; }
+/* у fullscreen опускаємо HUD нижче кутових кнопок (моделі зліва, «Вийти» справа) */
+.canvas-host.fullscreen .flow-hud { top: 64px; }
 
 .block-info {
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
@@ -291,6 +298,7 @@ main {
   height: 8px; background: var(--accent-2); border-radius: 4px;
   box-shadow: 0 0 10px rgba(33,212,168,0.4);
 }
+
 .block-meta { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
   font-size: 12px; padding: 4px 10px; border-radius: 20px;
@@ -301,8 +309,323 @@ main {
 .legend-row { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
 .legend-dot { width: 14px; height: 14px; border-radius: 4px; flex: 0 0 auto; }
 
+/* ── Меню «Прогін роботи» (керування проходженням даних) ─────────────────── */
+/* Підказку та кнопку повного екрана — нагору, щоб не перекривати нижнє меню */
+.canvas-hint { top: 12px; bottom: auto; }
+.fs-btn { top: 12px; bottom: auto; }
+
+.walk-panel {
+  position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 6; pointer-events: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  background: rgba(10,14,23,.85); backdrop-filter: blur(8px);
+  border: 1px solid var(--border); border-radius: 14px; padding: 10px;
+}
+.walk-steps { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: thin; }
+.walk-step-chip {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+  border-radius: 9px; padding: 5px 9px; font-size: 12px; transition: all .15s; white-space: nowrap;
+}
+.walk-step-chip:hover { color: var(--text); border-color: var(--accent); }
+.walk-step-chip.active { background: var(--accent); color: #04122b; border-color: var(--accent); font-weight: 700; }
+.wsc-num { font-weight: 800; opacity: .7; }
+.walk-step-chip.active .wsc-num { opacity: 1; }
+.walk-bar { display: flex; align-items: center; gap: 8px; }
+.walk-ctrl {
+  flex: 0 0 auto; border: 1px solid var(--border); background: var(--panel-2);
+  color: var(--text); border-radius: 9px; padding: 8px 11px; cursor: pointer;
+  font-weight: 700; font-size: 13px; transition: all .15s; white-space: nowrap;
+}
+.walk-ctrl:hover { background: var(--bg-2); border-color: var(--accent); }
+.walk-main { background: var(--accent); color: #04122b; border-color: transparent; }
+.walk-main:hover { filter: brightness(1.08); background: var(--accent); }
+.walk-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.walk-progress { flex: 1 1 auto; min-width: 40px; height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+.walk-progress-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #38bdf8, #4ade80); transition: width .3s ease; }
+.walk-label { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Модальне вікно з детальним описом блоку ─────────────────────────────── */
+/* Поповер біля блоку (а не модалка на весь екран) */
+.block-modal { position: absolute; inset: 0; z-index: 50; display: none; pointer-events: none; }
+.block-modal.open { display: block; }
+/* прозорий і НЕ блокує кліки — щоб панель «Прогін» працювала навіть з відкритим поповером (P3) */
+.block-modal-backdrop { position: absolute; inset: 0; background: transparent; pointer-events: none; }
+.block-modal-card .bm-head { cursor: grab; }
+.block-modal-card {
+  position: absolute; z-index: 1; width: 330px; max-height: calc(100% - 24px); overflow: auto;
+  background: linear-gradient(180deg, #121a2e, #0c1120); border: 1px solid var(--accent);
+  border-radius: 14px; padding: 18px; box-shadow: 0 18px 48px rgba(0,0,0,.55); animation: bmIn .15s ease;
+  pointer-events: auto;   /* лише картка ловить кліки, решта екрана — вільна (P3) */
+}
+.block-modal-arrow { position: absolute; width: 0; height: 0; }
+.block-modal-arrow.left {
+  left: -9px; border-top: 9px solid transparent; border-bottom: 9px solid transparent;
+  border-right: 9px solid var(--accent);
+}
+.block-modal-arrow.right {
+  right: -9px; border-top: 9px solid transparent; border-bottom: 9px solid transparent;
+  border-left: 9px solid var(--accent);
+}
+@keyframes bmIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
+.block-modal-close {
+  position: absolute; top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid var(--border); background: var(--panel-2); color: var(--muted);
+  font-size: 15px; cursor: pointer; transition: all .15s;
+}
+.block-modal-close:hover { color: var(--text); background: var(--bg-2); }
+.bm-head { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; padding-right: 36px; }
+.bm-cat { align-self: flex-start; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border: 1px solid; border-radius: 999px; padding: 3px 9px; font-weight: 700; }
+.bm-head h3 { font-size: 20px; font-weight: 800; }
+.bm-lead { font-size: 14.5px; line-height: 1.55; color: var(--text); margin-bottom: 14px; }
+.bm-field { margin-bottom: 13px; }
+.bm-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); margin-bottom: 4px; }
+.bm-field p { font-size: 14px; line-height: 1.6; color: var(--text); }
+.bm-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
+.bm-chip { background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; padding: 9px 11px; }
+.bm-chip .k { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 3px; }
+.bm-chip .v { font-size: 13.5px; color: var(--text); font-weight: 600; word-break: break-word; }
+.bm-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
+.bm-micro { list-style: none; padding: 0; margin-top: 6px; display: flex; flex-direction: column; gap: 6px; }
+.bm-micro li { display: flex; align-items: center; gap: 9px; font-size: 13.5px; color: var(--text); }
+.micro-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
+.bm-explode {
+  margin-top: 8px; width: 100%; border: 1px solid var(--border); background: var(--panel-2);
+  color: var(--text); border-radius: 10px; padding: 10px; font-weight: 700; cursor: pointer; transition: all .15s;
+}
+.bm-explode:hover { border-color: var(--accent); color: var(--accent); }
+
+/* ── Повний екран: приємніший фон ────────────────────────────────────────── */
+.canvas-host.fullscreen { background: radial-gradient(circle at 50% 38%, #16203a, #070b14 72%); }
+
+@media (max-width: 560px) {
+  .walk-label { display: none; }
+  .bm-grid { grid-template-columns: 1fr; }
+}
+
+/* ── Надійне приховування/показ блоків ────────────────────────────────────
+   Авторські правила (.result-box{display:flex}) перебивали атрибут hidden,
+   через що плашка-заглушка не зникала. Робимо hidden пріоритетним і явно
+   задаємо display для показаного стану. */
+[hidden] { display: none !important; }
+.result-box:not([hidden]) { display: flex !important; }
+.result-placeholder:not([hidden]) { display: flex !important; }
+.ood-banner:not([hidden]) { display: flex !important; }
+.spinner:not([hidden]) { display: inline-block !important; }
+#preview:not([hidden]) { display: block !important; }
+.loading-note { font-size: 14px; line-height: 1.5; color: var(--muted); font-weight: 500; }
+
 /* ── Footer ────────────────────────────────────────────────────────────── */
 .site-footer {
   position: relative; z-index: 1; text-align: center; padding: 28px;
   color: var(--muted); font-size: 13px; border-top: 1px solid var(--border);
 }
+
+/* ── Приклади (галерея швидкого старту) ───────────────────────────────────── */
+.examples { margin: 4px 0 22px; }
+.examples-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.ex-label { font-weight: 700; color: var(--text); }
+.ex-hint { font-size: 13px; }
+.example-groups { display: flex; gap: 18px; flex-wrap: wrap; }
+.ex-group { background: var(--bg-2); border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; }
+.ex-group-title { font-size: 13px; font-weight: 600; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+.ex-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+.ex-thumbs { display: flex; gap: 7px; }
+.ex-thumb { width: 58px; height: 58px; border-radius: 8px; object-fit: cover; cursor: pointer;
+  border: 2px solid transparent; transition: .15s; background: var(--panel-2); }
+.ex-thumb:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0,0,0,.4); }
+.ex-group.ood { border-style: dashed; border-color: var(--warn); }
+
+/* ── Leaflet-карта результату ──────────────────────────────────────────────── */
+.result-map { height: 300px; width: 100%; border-radius: 12px; border: 1px solid var(--border);
+  background: #0e1626; z-index: 0; }
+.leaflet-container { background: #0e1626; font-family: var(--font); }
+.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
+.leaflet-popup-content { margin: 10px 12px; font-size: 13px; }
+.leaflet-popup-content b { color: #fff; }
+
+/* ── Вторинна кнопка ───────────────────────────────────────────────────────── */
+.btn-secondary { width: 100%; margin-top: 10px; padding: 12px 18px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--bg-2); color: var(--text);
+  font-weight: 600; font-size: 14px; cursor: pointer; transition: .18s;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.btn-secondary:hover:not(:disabled) { border-color: var(--accent); background: #16213a; }
+.btn-secondary:disabled { opacity: .5; cursor: not-allowed; }
+
+/* ── OOD деталі + fallback ─────────────────────────────────────────────────── */
+.ood-metrics { margin-top: 6px; font-size: 13px; color: var(--muted); }
+.ood-metrics b { color: var(--text); }
+.ood-fallback { margin-top: 8px; padding: 7px 10px; border-radius: 8px;
+  background: rgba(79,140,255,.1); border: 1px solid rgba(79,140,255,.3); font-size: 13px; }
+
+/* ── Порівняння моделей (#6) ───────────────────────────────────────────────── */
+.compare-box { margin-top: 16px; }
+.compare-title { font-size: 15px; margin: 0 0 8px; }
+.compare-table, .bench-table, .cm-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.compare-table th, .compare-table td { padding: 9px 10px; text-align: left;
+  border-bottom: 1px solid var(--border); }
+.compare-table th { color: var(--muted); font-weight: 600; }
+.compare-table td small { display: block; color: var(--muted); font-size: 11px; }
+.num { text-align: right !important; font-variant-numeric: tabular-nums; }
+.num.hl { color: var(--accent-2); font-weight: 700; }
+.small { font-size: 11px; }
+.tag-ood { background: rgba(255,180,84,.18); color: var(--warn); padding: 2px 8px;
+  border-radius: 20px; font-size: 12px; font-weight: 600; }
+.tag-ok { background: rgba(33,212,168,.14); color: var(--accent-2); padding: 2px 8px;
+  border-radius: 20px; font-size: 12px; font-weight: 600; }
+
+/* ── Бенчмарк-таблиця + confusion matrix (#10) ─────────────────────────────── */
+.bench-table-wrap { overflow-x: auto; }
+.bench-table th, .bench-table td { padding: 9px 12px; border-bottom: 1px solid var(--border);
+  text-align: left; white-space: nowrap; }
+.bench-table th { color: var(--muted); font-weight: 600; }
+.bench-table tbody tr:hover { background: var(--panel-2); }
+.cm-section { margin-top: 26px; }
+.cm-head { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; }
+.cm-head h3 { margin: 0; font-size: 16px; }
+.cm-tabs { display: flex; gap: 8px; }
+.cm-tab { padding: 6px 12px; border-radius: 8px; border: 1px solid var(--border);
+  background: var(--bg-2); color: var(--muted); cursor: pointer; font-size: 13px; transition: .15s; }
+.cm-tab:hover { color: var(--text); }
+.cm-tab.active { border-color: var(--accent); color: #fff; background: #16213a; }
+.cm-host { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.cm-table th, .cm-table td { padding: 8px 12px; text-align: center; border: 1px solid var(--border); }
+.cm-table th { color: var(--muted); font-weight: 600; font-size: 12px; }
+.cm-corner { font-size: 11px !important; color: var(--muted); }
+.cm-cell { font-variant-numeric: tabular-nums; color: var(--text); font-weight: 600; min-width: 46px; }
+.cm-table.tpr td, .cm-table.tpr th { text-align: right; }
+.cm-table.tpr th:first-child, .cm-table.tpr tr th:first-child { text-align: left; }
+
+/* ── Карта уваги ViT (#4) ──────────────────────────────────────────────────── */
+.attn-wrap { margin-top: 14px; }
+.attn-result { margin-top: 10px; }
+.attn-img { width: 100%; max-width: 380px; border-radius: 12px; border: 1px solid var(--border); display: block; }
+
+/* ── Слайди-презентація (#slides) ──────────────────────────────────────────── */
+.deck { position: relative; display: flex; align-items: stretch;
+  background: radial-gradient(120% 140% at 0% 0%, #16213a 0%, var(--panel) 45%, var(--bg-2) 100%);
+  border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden;
+  min-height: 440px; box-shadow: var(--shadow); }
+.deck-stage { flex: 1; padding: 48px 60px; display: flex; flex-direction: column; justify-content: center; }
+.deck-stage.fade { animation: deckFade .4s ease; }
+@keyframes deckFade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.deck-nav { width: 56px; border: none; background: transparent; color: var(--muted);
+  font-size: 40px; cursor: pointer; transition: .15s; flex: 0 0 auto; }
+.deck-nav:hover { color: #fff; background: rgba(255,255,255,.04); }
+.deck-fs { position: absolute; top: 14px; right: 16px; width: 38px; height: 38px;
+  border-radius: 9px; border: 1px solid var(--border); background: rgba(10,14,23,.6);
+  color: var(--muted); cursor: pointer; font-size: 16px; transition: .15s; }
+.deck-fs:hover { color: #fff; border-color: var(--accent); }
+.deck-counter { position: absolute; bottom: 14px; right: 18px; color: var(--muted);
+  font-size: 13px; font-variant-numeric: tabular-nums; }
+.deck-dots { display: flex; gap: 9px; justify-content: center; margin-top: 16px; }
+.deck-dot { width: 10px; height: 10px; border-radius: 50%; border: none; cursor: pointer;
+  background: var(--panel-2); transition: .2s; }
+.deck-dot:hover { background: var(--muted); }
+.deck-dot.active { background: var(--accent); transform: scale(1.25); }
+
+/* Контент слайда */
+.s-head { display: flex; align-items: center; gap: 18px; margin-bottom: 22px; }
+.s-icon { font-size: 46px; line-height: 1; }
+.s-kicker { text-transform: uppercase; letter-spacing: .14em; font-size: 12px;
+  font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.s-title { margin: 0; font-size: 30px; line-height: 1.15; }
+.s-body { font-size: 17px; color: #cdd6e6; }
+.s-lead { font-size: 19px; color: var(--text); margin: 0 0 16px; }
+.s-foot { margin-top: 18px; font-size: 14px; color: var(--muted); line-height: 1.5; }
+.s-list { margin: 0; padding-left: 0; list-style: none; display: grid; gap: 11px; }
+.s-list li { padding-left: 26px; position: relative; line-height: 1.45; }
+.s-list li::before { content: '▸'; position: absolute; left: 4px; color: var(--accent); }
+.s-list.big li { font-size: 18px; }
+.s-chips { display: flex; gap: 12px; flex-wrap: wrap; margin: 6px 0; }
+.s-chip { padding: 8px 18px; border-radius: 30px; font-weight: 700; color: #08121f;
+  background: var(--c, var(--accent)); box-shadow: 0 6px 18px rgba(0,0,0,.35); }
+.s-stats { display: flex; gap: 16px; flex-wrap: wrap; }
+.s-stat { background: rgba(10,14,23,.5); border: 1px solid var(--border); border-radius: 12px;
+  padding: 14px 20px; text-align: center; min-width: 92px; }
+.s-stat b { display: block; font-size: 26px; color: var(--accent-2); }
+.s-stat span { font-size: 12px; color: var(--muted); }
+.s-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.s-card { background: rgba(10,14,23,.5); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.s-card.hl { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.s-card h4 { margin: 0 0 8px; font-size: 16px; }
+.s-card p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.45; }
+.s-flow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.s-flow i { color: var(--accent); font-style: normal; font-size: 20px; }
+.s-node { background: rgba(10,14,23,.6); border: 1px solid var(--border); border-radius: 10px;
+  padding: 12px 14px; font-weight: 600; font-size: 14px; text-align: center; }
+.s-node small { display: block; font-weight: 400; color: var(--muted); font-size: 11px; margin-top: 3px; }
+.s-node.hl { border-color: var(--accent-2); color: var(--accent-2); }
+.s-table { width: 100%; border-collapse: collapse; font-size: 16px; }
+.s-table th, .s-table td { padding: 11px 14px; text-align: center; border-bottom: 1px solid var(--border); }
+.s-table th { color: var(--muted); font-size: 13px; }
+.s-table td:first-child, .s-table th:first-child { text-align: left; }
+.s-table tr.hl td { color: var(--accent-2); font-weight: 700; background: rgba(33,212,168,.07); }
+.deck:fullscreen { min-height: 100vh; border-radius: 0; }
+.deck:fullscreen .deck-stage { padding: 6vh 9vw; }
+.deck:fullscreen .s-title { font-size: 44px; }
+.deck:fullscreen .s-body { font-size: 22px; }
+.deck:fullscreen .s-lead { font-size: 26px; }
+@media (max-width: 720px) {
+  .deck-stage { padding: 30px 18px; }
+  .s-title { font-size: 23px; }
+  .deck-nav { width: 40px; font-size: 30px; }
+}
+
+/* ── Візуалізації бенчмарку: t-SNE + reliability ───────────────────────────── */
+.viz-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 22px; margin-top: 26px; }
+.viz-card { background: rgba(10,14,23,.45); border: 1px solid var(--border);
+  border-radius: 12px; padding: 16px; }
+.viz-card h4 { margin: 0 0 12px; font-size: 15px; }
+#tsneCanvas { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border);
+  background: #0e1626; }
+.tsne-legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.tsne-legend .lg { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); }
+.rel-svg { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--border); }
+
+/* ── GeoScore-шкала + «як читати» ──────────────────────────────────────────── */
+.geoscore-box { margin-top: 14px; }
+.gs-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+.gs-head b { color: var(--accent-2); font-variant-numeric: tabular-nums; }
+.gs-track { height: 12px; border-radius: 8px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--border); }
+.gs-fill { height: 100%; border-radius: 8px; transition: width .6s ease;
+  background: linear-gradient(90deg, var(--danger), var(--warn) 55%, var(--accent-2)); }
+.gs-scale { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.howto { margin-top: 14px; border: 1px solid var(--border); border-radius: 10px; background: rgba(10,14,23,.4); }
+.howto summary { cursor: pointer; padding: 10px 14px; font-weight: 600; font-size: 14px; user-select: none; }
+.howto summary:hover { color: #fff; }
+.howto-list { margin: 0 0 12px; padding: 0 16px 0 32px; display: grid; gap: 7px; }
+.howto-list li { font-size: 13px; color: var(--muted); line-height: 1.45; }
+.howto-list b { color: var(--text); }
+
+/* ── Перемикач мови ────────────────────────────────────────────────────────── */
+.lang-toggle { margin-left: 6px; padding: 7px 12px; border-radius: 9px; border: 1px solid var(--border);
+  background: var(--panel-2); color: var(--text); font-weight: 700; font-size: 13px; cursor: pointer;
+  transition: .15s; min-width: 40px; }
+.lang-toggle:hover { border-color: var(--accent); color: #fff; }
+
+/* ── Кнопка виходу з повноекранного режиму анатомії (P2) ───────────────────── */
+.fs-exit {
+  position: absolute; top: 16px; right: 16px; z-index: 10000; display: none;
+  align-items: center; gap: 6px; height: 38px; padding: 0 16px; border-radius: 10px;
+  border: 1px solid var(--danger); background: rgba(7,11,19,.88); color: var(--text);
+  font-weight: 700; font-size: 14px; cursor: pointer; transition: .15s;
+}
+.fs-exit:hover { background: var(--danger); color: #fff; }
+.canvas-host.fullscreen .fs-exit { display: inline-flex; }
+.canvas-host.fullscreen .fs-btn { display: none; }
+/* підказка керування — нижче меню вибору моделі, щоб не перекривались */
+.canvas-host.fullscreen .canvas-hint { top: 64px; left: 16px; }
+
+/* ── Fullscreen анатомії: підняти main над липкою шапкою + меню вибору моделі ── */
+body.anatomy-fs main { z-index: 10000; }      /* інакше шапка (z50) перекриває fixed-host */
+.fs-models { position: absolute; top: 16px; left: 16px; z-index: 10000; display: none; gap: 8px; }
+.canvas-host.fullscreen .fs-models { display: flex; flex-wrap: wrap; }
+.fs-model-btn {
+  padding: 8px 14px; border-radius: 9px; border: 1px solid var(--border);
+  background: rgba(7,11,19,.85); color: var(--muted); cursor: pointer;
+  font-weight: 600; font-size: 13px; transition: .15s;
+}
+.fs-model-btn:hover { color: var(--text); border-color: var(--accent); }
+.fs-model-btn.active { background: var(--accent); color: #04122b; border-color: var(--accent); }

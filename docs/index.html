@@ -3,9 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Геолокація вуличних фото — Варшава · Прага · Будапешт</title>
+  <title>Геолокація вуличних фото — Київ · Варшава · Прага · Будапешт</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="css/style.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
   <div class="bg-grid" aria-hidden="true"></div>
@@ -14,13 +16,16 @@
     <div class="brand">
       <div class="brand-mark">◴</div>
       <div>
-        <h1>Геолокація вуличних фото</h1>
-        <p class="tagline">Нейромережа визначає місто за фотографією вулиці</p>
+        <h1 data-i18n="header.title">Геолокація вуличних фото</h1>
+        <p class="tagline" data-i18n="header.tagline">Нейромережа визначає місто за фотографією вулиці</p>
       </div>
     </div>
     <nav class="nav">
-      <a href="#predict" class="nav-link">Розпізнавання</a>
-      <a href="#anatomy" class="nav-link">Анатомія моделей</a>
+      <a href="#predict" class="nav-link" data-i18n="nav.recognize">Розпізнавання</a>
+      <a href="#benchmark" class="nav-link" data-i18n="nav.benchmark">Бенчмарк</a>
+      <a href="#slides" class="nav-link" data-i18n="nav.slides">Як це працює</a>
+      <a href="#anatomy" class="nav-link" data-i18n="nav.anatomy">Анатомія моделей</a>
+      <button id="langToggle" class="lang-toggle" title="Мова інтерфейсу / UI language">EN</button>
     </nav>
   </header>
 
@@ -28,10 +33,19 @@
     <!-- ───────────────────────── РОЗПІЗНАВАННЯ ───────────────────────── -->
     <section id="predict" class="panel">
       <div class="panel-head">
-        <h2>Завантажте фото вулиці</h2>
-        <p>Модель спробує вгадати, до якого з трьох міст належить знімок:
-           <b>Варшава</b>, <b>Прага</b> або <b>Будапешт</b>. Якщо фото не схоже
-           на жодне з них — система повідомить про це.</p>
+        <h2 data-i18n="predict.h">Завантажте фото вулиці</h2>
+        <p data-i18n-html="predict.sub">Модель спробує вгадати, до якого з чотирьох міст належить знімок:
+           <b>Київ</b>, <b>Варшава</b>, <b>Прага</b> або <b>Будапешт</b>. Якщо фото
+           не схоже на жодне з них — система повідомить про це.</p>
+      </div>
+
+      <!-- Приклади для швидкого старту -->
+      <div id="examples" class="examples" hidden>
+        <div class="examples-head">
+          <span class="ex-label" data-i18n="examples.label">⚡ Спробуйте на прикладі:</span>
+          <span class="ex-hint muted" data-i18n="examples.hint">натисніть фото — воно одразу завантажиться</span>
+        </div>
+        <div id="exampleGroups" class="example-groups"><!-- заповнюється JS --></div>
       </div>
 
       <div class="predict-grid">
@@ -41,19 +55,23 @@
             <input id="fileInput" type="file" accept="image/*" hidden />
             <div id="dropPrompt" class="drop-prompt">
               <div class="drop-icon">⇪</div>
-              <p><b>Перетягніть фото сюди</b></p>
-              <p class="muted">або натисніть, щоб обрати файл</p>
+              <p><b data-i18n="drop.title">Перетягніть фото сюди</b></p>
+              <p class="muted" data-i18n="drop.sub">або натисніть, щоб обрати файл</p>
             </div>
             <img id="preview" class="preview" alt="Перегляд фото" hidden />
           </div>
 
           <div class="model-picker">
-            <span class="picker-label">Оберіть модель:</span>
+            <span class="picker-label" data-i18n="picker.label">Оберіть модель:</span>
             <div id="modelList" class="model-list"><!-- заповнюється JS --></div>
           </div>
 
           <button id="predictBtn" class="btn-primary" disabled>
-            <span class="btn-text">Визначити місто</span>
+            <span class="btn-text" data-i18n="btn.predict">Визначити місто</span>
+            <span class="spinner" hidden></span>
+          </button>
+          <button id="compareBtn" class="btn-secondary" disabled>
+            <span class="btn-text" data-i18n="btn.compare">⚖ Порівняти всі 3 моделі</span>
             <span class="spinner" hidden></span>
           </button>
         </div>
@@ -62,7 +80,7 @@
         <div class="col-right">
           <div id="resultPlaceholder" class="result-placeholder">
             <div class="ph-icon">🗺️</div>
-            <p>Тут з'являться результати розпізнавання</p>
+            <p data-i18n="result.placeholder">Тут з'являться результати розпізнавання</p>
           </div>
 
           <div id="resultBox" class="result-box" hidden>
@@ -70,19 +88,101 @@
             <div id="verdict" class="verdict"></div>
             <div id="bars" class="bars"></div>
             <div class="map-wrap">
-              <svg id="miniMap" viewBox="0 0 320 240" class="mini-map" aria-label="Карта міст"></svg>
+              <div id="map" class="result-map" aria-label="Карта передбачення"></div>
             </div>
             <p id="modelMeta" class="model-meta"></p>
+
+            <div id="geoscoreBox" class="geoscore-box" hidden>
+              <div class="gs-head"><span data-i18n="howto.geoscore">GeoScore моделі (на тесті)</span><b id="gsVal"></b></div>
+              <div class="gs-track"><div id="gsFill" class="gs-fill"></div></div>
+              <div class="gs-scale"><span>0</span><span>2500</span><span>5000</span></div>
+            </div>
+
+            <details class="howto">
+              <summary data-i18n="howto.summary">❔ Як читати результат</summary>
+              <ul class="howto-list">
+                <li><b>Впевненість %</b> — наскільки модель певна у місті.</li>
+                <li><b>Карта:</b> маркер на передбаченому місті; коло — невпевненість
+                    (менша довіра → більший радіус).</li>
+                <li><b>OOD-банер</b> з'являється, якщо фото, ймовірно, не з цих 4 міст.</li>
+                <li><b>GeoScore</b> 0–5000 (стиль GeoGuessr): тестова якість моделі, 5000 = ідеально.</li>
+                <li><b>Карта уваги</b> (для ViT) показує, на що дивилась модель.</li>
+              </ul>
+            </details>
+
+            <div id="attnWrap" class="attn-wrap" hidden>
+              <button id="attnBtn" class="btn-secondary">
+                <span class="btn-text" data-i18n="btn.attn">🔍 Показати, на що дивилась модель</span>
+                <span class="spinner" hidden></span>
+              </button>
+              <div id="attnResult" class="attn-result" hidden>
+                <img id="attnImg" class="attn-img" alt="Карта уваги ViT" />
+                <p class="muted small">Яскравіші зони — куди ViT приділяв більше уваги
+                   (attention-rollout по всіх шарах).</p>
+              </div>
+            </div>
+          </div>
+
+          <div id="compareBox" class="compare-box" hidden></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ───────────────────────── БЕНЧМАРК ───────────────────────── -->
+    <section id="benchmark" class="panel">
+      <div class="panel-head">
+        <h2 data-i18n="benchmark.h">Бенчмарк моделей</h2>
+        <p data-i18n-html="benchmark.sub">Метрики на <b>тестовому наборі</b> (без витоку): Top-1, macro-F1,
+           збалансована точність, а також матриця плутанини й TPR/FPR по містах.</p>
+      </div>
+      <div id="benchTable" class="bench-table-wrap"><p class="muted">Завантаження метрик…</p></div>
+      <div class="cm-section">
+        <div class="cm-head">
+          <h3 data-i18n="cm.h">Деталі по моделі</h3>
+          <div class="cm-tabs" id="cmTabs"></div>
+        </div>
+        <div id="cmHost" class="cm-host"></div>
+        <div class="viz-grid">
+          <div class="viz-card">
+            <h4 data-i18n="viz.tsne">Простір ознак (t-SNE)</h4>
+            <canvas id="tsneCanvas" width="520" height="400"></canvas>
+            <div class="tsne-legend" id="tsneLegend"></div>
+            <p class="muted small">2D-проєкція ембедингів test-набору. Чіткі кластери =
+               модель добре розділяє міста у просторі ознак.</p>
+          </div>
+          <div class="viz-card">
+            <h4 data-i18n="viz.rel">Калібрування впевненості</h4>
+            <div id="relHost"></div>
+            <p class="muted small">Стовпчик — реальна точність у біні впевненості; пунктир —
+               ідеальна калібрація; <b>ECE</b> — середнє відхилення (менше = чесніша впевненість).</p>
           </div>
         </div>
       </div>
     </section>
 
+    <!-- ───────────────────────── СЛАЙДИ (як працює) ───────────────────────── -->
+    <section id="slides" class="panel">
+      <div class="panel-head">
+        <h2 data-i18n="slides.h">Як працює нейромережа</h2>
+        <p data-i18n-html="slides.sub">Інтерактивні слайди — пояснення проєкту для захисту (замість презентації).
+           Гортайте стрілками <b>← →</b>, клавіатурою або крапками знизу,
+           кнопка <b>⛶</b> — на весь екран.</p>
+      </div>
+      <div class="deck" id="deck">
+        <button class="deck-nav prev" id="deckPrev" aria-label="Назад">‹</button>
+        <div class="deck-stage" id="deckStage"></div>
+        <button class="deck-nav next" id="deckNext" aria-label="Вперед">›</button>
+        <button class="deck-fs" id="deckFs" title="На весь екран">⛶</button>
+        <div class="deck-counter" id="deckCounter"></div>
+      </div>
+      <div class="deck-dots" id="deckDots"></div>
+    </section>
+
     <!-- ───────────────────────── 3D АНАТОМІЯ ───────────────────────── -->
     <section id="anatomy" class="panel">
       <div class="panel-head">
-        <h2>3D-анатомія моделей</h2>
-        <p>Подивіться, як влаштована кожна нейромережа зсередини.
+        <h2 data-i18n="anatomy.h">3D-анатомія моделей</h2>
+        <p data-i18n-html="anatomy.sub">Подивіться, як влаштована кожна нейромережа зсередини.
            <b>Обертайте</b> сцену мишею, <b>наближайте</b> колесом і
            <b>натискайте</b> на блоки, щоб прочитати, що вони роблять.</p>
       </div>
@@ -106,14 +206,16 @@
   </main>
 
   <footer class="site-footer">
-    <p>Дипломна робота · класифікація вуличних фотографій за містом ·
+    <p data-i18n="footer">Дипломна робота · класифікація вуличних фотографій за містом ·
        StreetCLIP / EfficientNet-B2 / GeoCLIP</p>
   </footer>
 
-  <script src="js/vendor/three.min.js"></script>
-  <script src="js/vendor/OrbitControls.js"></script>
-  <script src="js/anatomy-data.js"></script>
-  <script src="js/anatomy.js"></script>
-  <script src="js/app.js"></script>
+  <script src="/static/js/vendor/three.min.js"></script>
+  <script src="/static/js/vendor/OrbitControls.js"></script>
+  <script src="/static/js/anatomy-data.js"></script>
+  <script src="/static/js/anatomy.js"></script>
+  <script src="/static/js/i18n.js"></script>
+  <script src="/static/js/slides.js"></script>
+  <script src="/static/js/app.js"></script>
 </body>
 </html>
