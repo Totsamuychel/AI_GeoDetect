@@ -81,16 +81,21 @@ CITY_INFO: dict[str, dict] = {
     "budapest": {"ua": "Будапешт", "country": "Угорщина", "lat": 47.4979, "lon": 19.0402},
 }
 
-# Скільки фото на місто брати для калібрування OOD-прототипів.
-OOD_SAMPLES_PER_CITY = 300
-# Перцентиль in-distribution подібностей як поріг (нижче → OOD).
-# 1 = відсікаємо лише ~1% найнетиповіших справжніх фото — це майже не дає
-# хибних спрацювань на справжніх фото міст (зокрема туристичних/нетипових
-# ракурсів), але все одно відсіює явно чужі знімки.
-OOD_PERCENTILE = 1.0
-# Додатковий запас: поріг ще трохи знижуємо, щоб справжні фото міст, які
-# відрізняються від «вуличного» розподілу навчання, не позначались як OOD.
-OOD_MARGIN = 0.90
+# OOD-гейт: Mahalanobis-відстань в embedding-просторі моделі до найближчого
+# класу (об'єднана коваріація зі shrinkage). На бенчмарку (StreetCLIP, негативи
+# osv5m/Румунія) Mahalanobis дав AUROC 0.906 проти 0.845 у косинус-прототипів.
+# Скільки фото на місто брати для калібрування.
+OOD_SAMPLES_PER_CITY = 400
+# Частка калібрувальних embedding-ів, відкладена для виставлення порога (решта
+# йде на оцінку середніх/коваріації). Поріг ставимо на цільовий FPR.
+OOD_CAL_HOLDOUT = 0.25
+# Цільовий FPR: який відсоток справжніх фото міст дозволяємо хибно позначити як
+# OOD. Компроміс: 10% дає ~75%+ вилову на «важких» сусідніх країнах (Румунія) і
+# майже 100% на явно чужих фото (інші континенти/приміщення/меми). Дилка одним
+# числом: менше → менше хибних тривог, але гірший вилов; більше → навпаки.
+OOD_FPR_TARGET = 10.0
+# Shrinkage коваріації (стабілізує обернення для D≈768..1408 при ~N образцях).
+OOD_COV_SHRINKAGE = 0.10
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -104,9 +109,10 @@ class _LoadedModel:
         self.arch = arch
         self.img_size = img_size
         self.transform = transform
-        # OOD-калібрування (заповнюється у _calibrate_ood)
-        self.prototypes: Optional[torch.Tensor] = None  # (C, D) нормалізовані
-        self.sim_threshold: Optional[float] = None
+        # OOD-калібрування (Mahalanobis; заповнюється у _calibrate_ood)
+        self.ood_means: Optional[np.ndarray] = None      # (C, D) середні класів
+        self.ood_cov_inv: Optional[np.ndarray] = None    # (D, D) обернена коваріація
+        self.ood_threshold: Optional[float] = None       # поріг на score=-min_c maha
 
 
 class ModelRegistry:
@@ -176,20 +182,19 @@ class ModelRegistry:
             probs = F.softmax(logits, dim=1)[0].float().cpu().numpy()
         return probs, emb
 
-    # ── Калібрування OOD-прототипів на TRAIN ──────────────────────────────────
+    # ── Калібрування OOD (Mahalanobis) на TRAIN ───────────────────────────────
     def _calibrate_ood(self, lm: _LoadedModel) -> None:
-        cache_file = CACHE_DIR / f"ood_{lm.arch}.json"
+        cache_file = CACHE_DIR / f"ood_{lm.arch}.npz"
         if cache_file.exists():
             try:
-                data = json.loads(cache_file.read_text(encoding="utf-8"))
-                if data.get("class_names") == lm.class_names:
-                    lm.prototypes = torch.tensor(
-                        data["prototypes"], dtype=torch.float32, device=self.device
-                    )
-                    lm.sim_threshold = float(data["sim_threshold"])
+                data = np.load(cache_file, allow_pickle=True)
+                if list(data["class_names"]) == list(lm.class_names):
+                    lm.ood_means = data["means"].astype(np.float32)
+                    lm.ood_cov_inv = data["cov_inv"].astype(np.float32)
+                    lm.ood_threshold = float(data["threshold"])
                     logger.info(
                         f"OOD-кеш «{lm.arch}» завантажено "
-                        f"(поріг подібності={lm.sim_threshold:.3f})."
+                        f"(поріг Mahalanobis-score={lm.ood_threshold:.2f})."
                     )
                     return
             except Exception as e:  # noqa: BLE001
@@ -210,14 +215,12 @@ class ModelRegistry:
             logger.warning(f"Не вдалося прочитати маніфест: {e}; OOD вимкнено.")
             return
 
-        logger.info(f"Калібрування OOD для «{lm.arch}» (це разова операція)…")
+        logger.info(f"Калібрування OOD (Mahalanobis) для «{lm.arch}» (разова операція)…")
         per_class_embs: dict[str, list[np.ndarray]] = {c: [] for c in lm.class_names}
-        idx_of = {c: i for i, c in enumerate(lm.class_names)}
 
         for city in lm.class_names:
-            sub = df[df["city"].astype(str).str.lower() == city.lower()]
-            sub = sub.head(OOD_SAMPLES_PER_CITY)
-            batch, paths = [], []
+            sub = df[df["city"].astype(str).str.lower() == city.lower()].head(OOD_SAMPLES_PER_CITY)
+            batch = []
             for _, row in sub.iterrows():
                 # filepath у v2-маніфесті відносний до кореня проєкту
                 # (data/images/...), у старих — відносний до dataset/.
@@ -232,7 +235,6 @@ class ModelRegistry:
                 except Exception:  # noqa: BLE001
                     continue
                 batch.append(lm.transform(img))
-                paths.append(p)
                 if len(batch) == 16:
                     self._accumulate_embs(lm, batch, per_class_embs[city])
                     batch = []
@@ -240,42 +242,53 @@ class ModelRegistry:
                 self._accumulate_embs(lm, batch, per_class_embs[city])
             logger.info(f"  {city}: {len(per_class_embs[city])} embedding-ів")
 
-        # Прототипи = середній нормалізований embedding кожного класу.
-        protos = torch.zeros(len(lm.class_names), 0)
-        proto_list = []
-        all_own_sims: list[float] = []
-        valid = all(len(v) >= 10 for v in per_class_embs.values())
-        if not valid:
+        if not all(len(v) >= 20 for v in per_class_embs.values()):
             logger.warning(f"Замало зображень для калібрування «{lm.arch}» — OOD вимкнено.")
             return
 
-        # Будуємо прототипи
-        proto_tensors = []
-        for c in lm.class_names:
-            arr = np.stack(per_class_embs[c])  # (n, D)
-            proto = arr.mean(axis=0)
-            proto = proto / (np.linalg.norm(proto) + 1e-8)
-            proto_tensors.append(proto)
-        protos_np = np.stack(proto_tensors)  # (C, D)
-
-        # Власні подібності кожного train-embedding до прототипу свого класу.
-        for c in lm.class_names:
+        # Розбиваємо кожен клас на fit (середні+коваріація) та cal (поріг на FPR).
+        rng = np.random.default_rng(42)
+        fit_embs, fit_lbl, cal_embs = [], [], []
+        for ci, c in enumerate(lm.class_names):
             arr = np.stack(per_class_embs[c])
-            sims = arr @ protos_np[idx_of[c]]  # (n,)
-            all_own_sims.extend(sims.tolist())
+            idx = rng.permutation(len(arr))
+            n_hold = max(5, int(len(arr) * OOD_CAL_HOLDOUT))
+            cal_embs.append(arr[idx[:n_hold]])
+            fit = arr[idx[n_hold:]]
+            fit_embs.append(fit); fit_lbl.append(np.full(len(fit), ci))
+        X = np.concatenate(fit_embs).astype(np.float64)
+        y = np.concatenate(fit_lbl)
+        Xcal = np.concatenate(cal_embs).astype(np.float64)
+        D = X.shape[1]
 
-        sim_threshold = float(np.percentile(all_own_sims, OOD_PERCENTILE)) * OOD_MARGIN
-        lm.prototypes = torch.tensor(protos_np, dtype=torch.float32, device=self.device)
-        lm.sim_threshold = sim_threshold
+        # Середні класів + об'єднана коваріація зі shrinkage (стабільне обернення).
+        means = np.stack([X[y == i].mean(0) for i in range(len(lm.class_names))])  # (C,D)
+        Z = X - means[y]
+        cov = (Z.T @ Z) / len(X)
+        cov = (1 - OOD_COV_SHRINKAGE) * cov + OOD_COV_SHRINKAGE * (np.trace(cov) / D) * np.eye(D)
+        cov_inv = np.linalg.pinv(cov)
 
-        cache_file.write_text(json.dumps({
-            "class_names":   lm.class_names,
-            "prototypes":    protos_np.tolist(),
-            "sim_threshold": sim_threshold,
-        }), encoding="utf-8")
+        def maha_score(E):
+            diff = E[:, None, :] - means[None, :, :]            # (N,C,D)
+            md = np.einsum("ncd,de,nce->nc", diff, cov_inv, diff)
+            return -md.min(1)                                   # вище = in-dist
+
+        # Поріг = OOD_FPR_TARGET-перцентиль score на відкладеному cal-наборі.
+        threshold = float(np.percentile(maha_score(Xcal), OOD_FPR_TARGET))
+
+        lm.ood_means = means.astype(np.float32)
+        lm.ood_cov_inv = cov_inv.astype(np.float32)
+        lm.ood_threshold = threshold
+
+        np.savez_compressed(
+            cache_file,
+            class_names=np.array(lm.class_names),
+            means=lm.ood_means, cov_inv=lm.ood_cov_inv,
+            threshold=np.array(threshold, dtype=np.float64),
+        )
         logger.info(
-            f"OOD «{lm.arch}» відкалібровано: поріг подібності={sim_threshold:.3f} "
-            f"(кеш збережено)."
+            f"OOD «{lm.arch}» відкалібровано (Mahalanobis): поріг score={threshold:.2f}, "
+            f"D={D}, цільовий FPR={OOD_FPR_TARGET}% (кеш збережено)."
         )
 
     def _accumulate_embs(self, lm, batch_tensors, sink: list) -> None:
@@ -289,19 +302,27 @@ class ModelRegistry:
             sink.append(row)
 
     # ── Публічний інференс ─────────────────────────────────────────────────────
-    def predict(self, arch: str, image: Image.Image) -> dict:
+    def predict(self, arch: str, image: Image.Image, fallback: bool = True) -> dict:
         with self._lock:
             lm = self._ensure_loaded(arch)
             tensor = lm.transform(image.convert("RGB")).unsqueeze(0).to(self.device)
             probs, emb = self._infer_tensor(lm, tensor)
 
-            # OOD: максимальна косинусна подібність до прототипів класів.
-            max_sim = None
+            # OOD: Mahalanobis-score = -min_c відстань до класу в emb-просторі.
+            # Вище score → ближче до розподілу міст; нижче за поріг → OOD.
+            ood_score = None
             is_ood = False
-            if lm.prototypes is not None and lm.sim_threshold is not None:
-                sims = (emb @ lm.prototypes.T)[0].float().cpu().numpy()  # (C,)
-                max_sim = float(sims.max())
-                is_ood = max_sim < lm.sim_threshold
+            ood_enabled = (
+                lm.ood_means is not None
+                and lm.ood_cov_inv is not None
+                and lm.ood_threshold is not None
+            )
+            if ood_enabled:
+                e = emb[0].float().cpu().numpy().astype(np.float32)       # (D,)
+                diff = e[None, :] - lm.ood_means                         # (C,D)
+                md = np.einsum("cd,de,ce->c", diff, lm.ood_cov_inv, diff)
+                ood_score = float(-md.min())
+                is_ood = ood_score < lm.ood_threshold
 
         # Сортуємо передбачення за ймовірністю.
         order = np.argsort(-probs)
@@ -322,13 +343,115 @@ class ModelRegistry:
             "model":       arch,
             "predictions": predictions,
             "ood": {
-                "is_ood":        bool(is_ood),
-                "max_similarity": None if max_sim is None else round(max_sim, 4),
-                "threshold":      None if lm.sim_threshold is None else round(lm.sim_threshold, 4),
-                "enabled":        lm.prototypes is not None,
+                "is_ood":         bool(is_ood),
+                "method":         "mahalanobis",
+                "score":          None if ood_score is None else round(ood_score, 2),
+                "max_similarity": None if ood_score is None else round(ood_score, 2),  # back-compat
+                "threshold":      None if lm.ood_threshold is None else round(lm.ood_threshold, 2),
+                "enabled":        ood_enabled,
             },
         }
+
+        # #5 OOD-fallback: якщо гейт спрацював, додаємо підказку від GeoCLIP
+        # (інша архітектура → інший погляд). Лок уже відпущено, тож виклик
+        # predict('geoclip') безпечний; fallback=False, щоб не зациклитись.
+        if fallback and is_ood and arch != "geoclip" and "geoclip" in MODELS:
+            try:
+                g = self.predict("geoclip", image, fallback=False)
+                gtop = g["predictions"][0]
+                result["ood"]["fallback"] = {
+                    "model":    "geoclip",
+                    "city":     gtop["city"],
+                    "city_ua":  gtop["city_ua"],
+                    "prob":     gtop["prob"],
+                    "is_ood":   g["ood"]["is_ood"],
+                }
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"GeoCLIP-fallback не вдався: {e}")
+
         return result
+
+    # ── #4 Attention-rollout (де «дивилась» ViT) ──────────────────────────────
+    def explain(self, arch: str, image: Image.Image) -> dict:
+        """Карта уваги ViT (attention-rollout) для CLIP-моделей. Повертає
+        base64-overlay поверх вхідного фото."""
+        if arch not in ("streetclip", "geoclip"):
+            return {"available": False,
+                    "reason": "Карта уваги доступна лише для ViT-моделей (StreetCLIP / GeoCLIP)."}
+        with self._lock:
+            lm = self._ensure_loaded(arch)
+            tensor = lm.transform(image.convert("RGB")).unsqueeze(0).to(self.device)
+            vm = lm.model.vision_model
+            # transformers 5.x за замовчуванням використовує SDPA, який НЕ
+            # повертає ваги уваги. Тимчасово вмикаємо eager-attention.
+            prev_impl = getattr(vm.config, "_attn_implementation", None)
+            try:
+                vm.config._attn_implementation = "eager"
+                with torch.no_grad():
+                    out = vm(pixel_values=tensor, output_attentions=True)
+            finally:
+                if prev_impl is not None:
+                    vm.config._attn_implementation = prev_impl
+            atts = out.attentions or ()                # tuple(L) of (B,H,T,T)
+            if not atts:
+                return {"available": False,
+                        "reason": "Не вдалося отримати ваги уваги (SDPA backend)."}
+            T = atts[0].size(-1)
+            roll = torch.eye(T, device=self.device)
+            for a in atts:
+                a = a.mean(1)[0]                       # head-mean (T,T)
+                a = a + torch.eye(T, device=self.device)
+                a = a / a.sum(-1, keepdim=True)
+                roll = a @ roll
+            cls = roll[0, 1:]                          # CLS → патчі
+            g = int(round(cls.numel() ** 0.5))
+            grid = cls[: g * g].reshape(g, g).float().cpu().numpy()
+        return {"available": True, "grid_size": g,
+                "heatmap": self._heatmap_overlay(image, grid)}
+
+    def _heatmap_overlay(self, image: Image.Image, grid: np.ndarray) -> str:
+        import base64
+        import io
+        img = image.convert("RGB")
+        W, H = img.size
+        g = grid - grid.min()
+        g = g / (g.max() + 1e-8)
+        heat = Image.fromarray((g * 255).astype(np.uint8)).resize((W, H), Image.BICUBIC)
+        heat = np.asarray(heat).astype(np.float32) / 255.0
+        rgba = self._colormap_rgba(heat)
+        comp = Image.alpha_composite(img.convert("RGBA"), Image.fromarray(rgba, "RGBA"))
+        buf = io.BytesIO()
+        comp.convert("RGB").save(buf, "JPEG", quality=85)
+        return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
+
+    @staticmethod
+    def _colormap_rgba(heat: np.ndarray) -> np.ndarray:
+        """(H,W) у [0,1] → (H,W,4) uint8 RGBA «jet»-палітрою (без matplotlib).
+        alpha ∝ інтенсивність, тож холодні зони майже прозорі."""
+        v = np.clip(heat, 0.0, 1.0)
+        r = np.clip(1.5 - np.abs(4 * v - 3), 0, 1)
+        g = np.clip(1.5 - np.abs(4 * v - 2), 0, 1)
+        b = np.clip(1.5 - np.abs(4 * v - 1), 0, 1)
+        H, W = heat.shape
+        rgba = np.zeros((H, W, 4), np.uint8)
+        rgba[..., 0] = (r * 255).astype(np.uint8)
+        rgba[..., 1] = (g * 255).astype(np.uint8)
+        rgba[..., 2] = (b * 255).astype(np.uint8)
+        rgba[..., 3] = (v ** 0.8 * 200).astype(np.uint8)         # alpha
+        return rgba
+
+    # ── Запуск усіх моделей одразу (#6 «порівняти всі») ───────────────────────
+    def predict_all(self, image: Image.Image) -> dict:
+        results = []
+        for arch, cfg in MODELS.items():
+            if not cfg["checkpoint"].exists():
+                continue
+            try:
+                results.append(self.predict(arch, image, fallback=False))
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"predict_all: модель «{arch}» впала: {e}")
+                results.append({"model": arch, "error": str(e)})
+        return {"results": results}
 
 
 # Глобальний синглтон

@@ -91,6 +91,11 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"error": str(e)}, 500)
             return
 
+        if path == "/api/benchmark":
+            bm = Path(__file__).resolve().parents[1] / "results" / "benchmark_v2.json"
+            self._send_file(bm)
+            return
+
         # Статика (захист від виходу за межі каталогу)
         if path.startswith("/static/"):
             rel = path[len("/static/"):]
@@ -106,7 +111,7 @@ class Handler(BaseHTTPRequestHandler):
     # ── POST ───────────────────────────────────────────────────────────────────
     def do_POST(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path != "/api/predict":
+        if path not in ("/api/predict", "/api/predict_all", "/api/explain"):
             self._send_json({"error": "Не знайдено"}, 404)
             return
 
@@ -121,13 +126,19 @@ class Handler(BaseHTTPRequestHandler):
         try:
             raw = self.rfile.read(length)
             payload = json.loads(raw.decode("utf-8"))
-            arch = payload.get("model", "streetclip")
             image_data = payload.get("image")
             if not image_data:
                 self._send_json({"error": "Не передано зображення."}, 400)
                 return
             image = decode_image(image_data)
-            result = get_registry().predict(arch, image)
+            if path == "/api/predict_all":
+                result = get_registry().predict_all(image)
+            elif path == "/api/explain":
+                arch = payload.get("model", "streetclip")
+                result = get_registry().explain(arch, image)
+            else:
+                arch = payload.get("model", "streetclip")
+                result = get_registry().predict(arch, image)
             self._send_json(result)
         except FileNotFoundError as e:
             self._send_json({"error": f"Модель недоступна: {e}"}, 503)

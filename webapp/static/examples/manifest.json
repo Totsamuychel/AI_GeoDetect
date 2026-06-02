@@ -1,0 +1,56 @@
+{
+  "cities": [
+    {
+      "id": "kyiv",
+      "ua": "Київ",
+      "photos": [
+        "examples/kyiv/kyiv_1.jpg",
+        "examples/kyiv/kyiv_2.jpg",
+        "examples/kyiv/kyiv_3.jpg",
+        "examples/kyiv/kyiv_4.jpg",
+        "examples/kyiv/kyiv_5.jpg"
+      ]
+    },
+    {
+      "id": "warsaw",
+      "ua": "Варшава",
+      "photos": [
+        "examples/warsaw/warsaw_1.jpg",
+        "examples/warsaw/warsaw_2.jpg",
+        "examples/warsaw/warsaw_3.jpg",
+        "examples/warsaw/warsaw_4.jpg",
+        "examples/warsaw/warsaw_5.jpg"
+      ]
+    },
+    {
+      "id": "prague",
+      "ua": "Прага",
+      "photos": [
+        "examples/prague/prague_1.jpg",
+        "examples/prague/prague_2.jpg",
+        "examples/prague/prague_3.jpg",
+        "examples/prague/prague_4.jpg",
+        "examples/prague/prague_5.jpg"
+      ]
+    },
+    {
+      "id": "budapest",
+      "ua": "Будапешт",
+      "photos": [
+        "examples/budapest/budapest_1.jpg",
+        "examples/budapest/budapest_2.jpg",
+        "examples/budapest/budapest_3.jpg",
+        "examples/budapest/budapest_4.jpg",
+        "examples/budapest/budapest_5.jpg"
+      ]
+    }
+  ],
+  "ood": {
+    "ua": "Інше місто (OOD)",
+    "photos": [
+      "examples/ood/ood_1.jpg",
+      "examples/ood/ood_2.jpg",
+      "examples/ood/ood_3.jpg"
+    ]
+  }
+}
