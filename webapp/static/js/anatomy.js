@@ -581,18 +581,52 @@
     });
   }
 
-  function makePulse(color) {
-    const g = new THREE.Group();
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), new THREE.MeshBasicMaterial({ color })));
-    g.add(new THREE.Mesh(new THREE.SphereGeometry(0.75, 16, 16), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthWrite: false })));
-    for (let i = 1; i <= 3; i++) {
-        const tail = new THREE.Mesh(new THREE.SphereGeometry(0.25 - i*0.05, 8, 8), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2 - i*0.05 }));
-        tail.position.x = -i * 0.4;
-        g.add(tail);
-    }
-    g.visible = false; modelGroup.add(g); return g;
+  function makeDataPacket(type) {
+    const group = new THREE.Group();
+    
+    const imgCanvas = document.createElement('canvas');
+    imgCanvas.width = 128; imgCanvas.height = 128;
+    const ctx = imgCanvas.getContext('2d');
+    ctx.fillStyle = 'rgba(30, 40, 60, 0.9)';
+    ctx.beginPath(); ctx.roundRect(10, 10, 108, 108, 16); ctx.fill();
+    ctx.fillStyle = type === 'gps' ? '#b07cff' : '#4f8cff';
+    ctx.font = '54px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(type === 'gps' ? '📍' : '🖼️', 64, 68);
+    ctx.strokeStyle = type === 'gps' ? '#b07cff' : '#4f8cff'; 
+    ctx.lineWidth = 4; ctx.stroke();
+    
+    const imgTex = new THREE.CanvasTexture(imgCanvas);
+    const imgMat = new THREE.SpriteMaterial({ map: imgTex, transparent: true, depthTest: false });
+    const imgSprite = new THREE.Sprite(imgMat);
+    imgSprite.scale.set(1.2, 1.2, 1);
+    group.add(imgSprite);
+
+    const cubeGeo = new THREE.BoxGeometry(0.7, 0.7, 0.7);
+    const cubeMat = new THREE.MeshPhysicalMaterial({
+        color: type === 'gps' ? 0xb07cff : 0x7be0ff,
+        emissive: type === 'gps' ? 0xb07cff : 0x7be0ff,
+        emissiveIntensity: 0.8,
+        transparent: true, opacity: 0,
+        roughness: 0.1, transmission: 0.5
+    });
+    const cube = new THREE.Mesh(cubeGeo, cubeMat);
+    const edges = new THREE.LineSegments(new THREE.EdgesGeometry(cubeGeo), new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 }));
+    cube.add(edges);
+    group.add(cube);
+
+    const resLbl = makeLabel(type === 'gps' ? 'GPS Ознаки' : 'Результат', 36, true);
+    resLbl.material.opacity = 0;
+    group.add(resLbl);
+
+    group.userData = { imgSprite, cube, edges, resLbl, type };
+    group.visible = false;
+    modelGroup.add(group);
+    return group;
   }
-  function createPulses() { pulseMesh = makePulse(0x7be0ff); gpsPulseMesh = gpsFlow.length ? makePulse(0xb07cff) : null; }
+
+  function createPulses() { pulseMesh = makeDataPacket('image'); gpsPulseMesh = gpsFlow.length ? makeDataPacket('gps') : null; }
+  
   function resetFlowState() {
     flowState = { active: false, lanes: [], holdFrames: 0 };
     pulseMesh = null; gpsPulseMesh = null;
@@ -633,6 +667,7 @@
     let allDone = true;
     flowState.lanes.forEach(lane => {
       const path = lane.path;
+      const pkt = lane.pulse.userData;
       if (!lane.done) {
         allDone = false;
         if (lane.pause > 0) { lane.pause--; } else {
@@ -648,6 +683,35 @@
       }
       const i = Math.min(lane.seg, path.length - 1), j = Math.min(lane.seg + 1, path.length - 1);
       lane.pulse.position.lerpVectors(path[i].pos, path[j].pos, lane.t);
+
+      // Animation logic
+      const totalSegs = path.length - 1;
+      const progress = totalSegs > 0 ? (Math.min(lane.seg, totalSegs) + (lane.done ? 0 : lane.t)) / totalSegs : 1;
+
+      pkt.cube.rotation.x += 0.04;
+      pkt.cube.rotation.y += 0.04;
+
+      if (progress < 0.15) {
+          const localT = progress / 0.15;
+          pkt.imgSprite.material.opacity = 1 - localT;
+          pkt.cube.material.opacity = localT * 0.8;
+          pkt.edges.material.opacity = localT * 0.5;
+          pkt.resLbl.material.opacity = 0;
+          pkt.cube.scale.setScalar(localT);
+      } else if (progress < 0.85) {
+          pkt.imgSprite.material.opacity = 0;
+          pkt.cube.material.opacity = 0.8 + Math.sin(Date.now() * 0.01) * 0.2;
+          pkt.edges.material.opacity = 0.5;
+          pkt.resLbl.material.opacity = 0;
+          pkt.cube.scale.setScalar(1);
+      } else {
+          const localT = (progress - 0.85) / 0.15;
+          pkt.cube.material.opacity = (1 - localT) * 0.8;
+          pkt.edges.material.opacity = (1 - localT) * 0.5;
+          pkt.resLbl.material.opacity = localT;
+          pkt.resLbl.position.y = 0.4 + localT * 0.6;
+          pkt.cube.scale.setScalar(1 - localT);
+      }
     });
     const primary = flowState.lanes.find(l => l.primary);
     if (primary) { walkIndex = Math.min(primary.seg, mainFlow.length - 1); updateWalkPanel(); }
