@@ -190,8 +190,13 @@ main {
 .model-meta { font-size: 12px; color: var(--muted); }
 
 /* ── Anatomy ───────────────────────────────────────────────────────────── */
-.anatomy-tabs { display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap; }
+.anatomy-tabs {
+  display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: nowrap;
+  overflow-x: auto; scrollbar-width: none; padding-bottom: 2px;
+}
+.anatomy-tabs::-webkit-scrollbar { display: none; }
 .tab {
+  flex-shrink: 0; white-space: nowrap;
   padding: 10px 18px; border-radius: 10px; border: 1px solid var(--border);
   background: var(--bg-2); color: var(--muted); cursor: pointer; font-weight: 600;
   font-size: 14px; transition: .18s;
@@ -234,11 +239,11 @@ main {
 
 /* HUD з поточною формою тензора під час проходу */
 .flow-hud {
-  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3;
-  font-size: 13px; color: var(--muted); background: rgba(7,11,19,.78);
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 9999;
+  font-size: 13px; color: var(--muted); background: rgba(7,11,19,.85);
   padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border);
-  font-variant-numeric: tabular-nums; pointer-events: none;
-  opacity: 0; transition: opacity .25s; max-width: 90%;
+  font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap;
+  opacity: 0; transition: opacity .25s; max-width: 60%; overflow: hidden; text-overflow: ellipsis;
 }
 .flow-hud.show { opacity: 1; }
 .flow-hud b { color: var(--accent); font-weight: 700; }
@@ -250,7 +255,8 @@ main {
 }
 .canvas-host.fullscreen .fs-btn { top: 16px; bottom: auto; right: 16px; }
 .canvas-host.fullscreen .flow-btn { top: 16px; bottom: auto; right: 60px; }
-.canvas-host.fullscreen .flow-hud { top: 20px; }
+/* у fullscreen опускаємо HUD нижче кутових кнопок (моделі зліва, «Вийти» справа) */
+.canvas-host.fullscreen .flow-hud { top: 64px; }
 
 .block-info {
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
@@ -299,9 +305,10 @@ main {
 .walk-main { background: var(--accent); color: #04122b; border-color: transparent; }
 .walk-main:hover { filter: brightness(1.08); background: var(--accent); }
 .walk-info { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5px; }
-.walk-progress { height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
+.walk-progress { flex: 1 1 auto; min-width: 40px; height: 6px; border-radius: 999px; background: rgba(255,255,255,.1); overflow: hidden; }
 .walk-progress-fill { height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #38bdf8, #4ade80); transition: width .3s ease; }
-.walk-label { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.walk-label { font-size: 12px; color: var(--muted); text-align: center; margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ── Модальне вікно з детальним описом блоку ─────────────────────────────── */
 /* Поповер біля блоку (а не модалка на весь екран) */

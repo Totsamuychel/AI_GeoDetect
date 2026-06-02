@@ -149,11 +149,9 @@
         <button id="walkPrevBtn" class="walk-ctrl" title="Попередній крок (←)">◀</button>
         <button id="walkPlayBtn" class="walk-ctrl walk-main" title="Запустити прогін (Пробіл)">▶ Прогін</button>
         <button id="walkNextBtn" class="walk-ctrl" title="Наступний крок (→)">▶</button>
-        <div class="walk-info">
-          <div class="walk-progress"><div id="walkBar" class="walk-progress-fill"></div></div>
-          <div id="walkLabel" class="walk-label">Крок 0 / 0</div>
-        </div>
-      </div>`;
+        <div class="walk-progress"><div id="walkBar" class="walk-progress-fill"></div></div>
+      </div>
+      <div id="walkLabel" class="walk-label">Крок 0 / 0</div>`;
     host.appendChild(panel);
     document.getElementById('walkPrevBtn').addEventListener('click', walkPrev);
     document.getElementById('walkNextBtn').addEventListener('click', walkNext);
@@ -265,7 +263,7 @@
     const userData = { block: b, baseEmissive: 0.12 };
 
     const stacks = b.stack || 1;
-    const gap = 0.08;
+    const gap = 0.14;   // більший зазор → під-шари MBConv не зливаються (Баг 3)
     const h = (H - gap * (stacks - 1)) / stacks;
 
     for (let i = 0; i < stacks; i++) {
