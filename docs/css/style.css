@@ -253,10 +253,44 @@ main {
 
 .block-info {
   background: var(--bg-2); border: 1px solid var(--border); border-radius: 14px;
-  padding: 20px; display: flex; flex-direction: column; gap: 12px;
+  padding: 24px; display: flex; flex-direction: column; gap: 16px;
+  transition: transform 0.3s ease, opacity 0.3s ease;
 }
-.block-info h3 { font-size: 19px; }
-#blockDesc { font-size: 14px; line-height: 1.6; }
+.block-info.updating { opacity: 0; transform: translateY(10px); }
+
+.block-info h3 { font-size: 21px; font-weight: 700; color: var(--text); }
+#blockDesc { font-size: 14.5px; line-height: 1.65; color: var(--text); }
+
+.hint-small { color: var(--accent); font-size: 12.5px; font-weight: 600; display: block; margin-top: 8px; }
+
+/* Micro-list styling */
+.micro-list { margin-top: 10px; padding-left: 20px; list-style: none; }
+.micro-list li { position: relative; margin-bottom: 6px; color: var(--accent-2); font-size: 13.5px; }
+.micro-list li::before { content: '→'; position: absolute; left: -18px; color: var(--accent); font-weight: 700; }
+
+/* Tensor Visuals */
+.tensor-visual {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  padding: 8px 12px; background: rgba(79,140,255,0.08); border-radius: 8px;
+  border-left: 3px solid var(--accent);
+}
+.tensor-visual span { font-family: monospace; font-weight: 700; color: var(--accent); font-size: 15px; }
+
+.cube-icon {
+  width: 20px; height: 20px; background: var(--accent);
+  position: relative; transform: rotateX(-30deg) rotateY(45deg);
+  box-shadow: 10px 10px 20px rgba(0,0,0,0.3);
+}
+.cube-icon::before, .cube-icon::after {
+  content: ''; position: absolute; inset: 0;
+}
+.cube-icon::before { background: rgba(255,255,255,0.3); transform: rotateY(90deg) translateZ(10px); }
+.cube-icon::after { background: rgba(0,0,0,0.2); transform: rotateX(90deg) translateZ(10px); }
+
+.bar-icon {
+  height: 8px; background: var(--accent-2); border-radius: 4px;
+  box-shadow: 0 0 10px rgba(33,212,168,0.4);
+}
 .block-meta { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {
   font-size: 12px; padding: 4px 10px; border-radius: 20px;
