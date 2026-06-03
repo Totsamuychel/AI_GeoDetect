@@ -72,7 +72,7 @@
       const el = document.createElement('div');
       el.className = 'ex-group' + (g.ood ? ' ood' : '');
       const thumbs = g.photos.map(p =>
-        `<img class="ex-thumb" src="/static/${p}" alt="${g.ua}" loading="lazy" data-src="/static/${p}">`).join('');
+        `<img class="ex-thumb" src="./${p}" alt="${g.ua}" loading="lazy" data-src="./${p}">`).join('');
       el.innerHTML =
         `<div class="ex-group-title"><span class="ex-dot" style="background:${color}"></span>${g.ua}</div>
          <div class="ex-thumbs">${thumbs}</div>`;
