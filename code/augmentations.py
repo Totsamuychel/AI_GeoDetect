@@ -1,11 +1,11 @@
 """
-augmentations.py — Аугментації даних для вуличних зображень.
+augmentations.py — Data augmentation for street imagery.
 
-Реалізує трансформації для навчання та валідації на основі torchvision.transforms.
-Оптимізовано для вуличних панорам та знімків з автомобілів:
-  - Без вертикального перевертання (знімки завжди «правосторонні»)
-  - Без екстремальних геометричних викривлень
-  - ColorJitter та RandomGrayscale для робастності до освітлення
+Implements transformations for training and validation based on torchvision.transforms.
+Optimized for street panoramas and car shots:
+- No vertical flipping (images are always "right-side up")
+- No extreme geometric distortions
+- ColorJitter and RandomGrayscale for robustness to lighting
 """
 
 from __future__ import annotations
@@ -18,15 +18,15 @@ from torchvision.transforms import InterpolationMode
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Константи нормалізації ImageNet
+# ImageNet normalization constants
 # ──────────────────────────────────────────────────────────────────────────────
 
 IMAGENET_MEAN: Tuple[float, float, float] = (0.485, 0.456, 0.406)
 IMAGENET_STD: Tuple[float, float, float]  = (0.229, 0.224, 0.225)
 
-# Константи нормалізації OpenAI CLIP (StreetCLIP/GeoCLIP використовують CLIP
-# vision encoder, який очікує саме ці mean/std; HF CLIPModel НЕ нормалізує
-# сирий тензор сам — подача ImageNet-норми деградує фічі).
+# OpenAI CLIP normalization constants (StreetCLIP/GeoCLIP use the CLIP
+# vision encoder, which expects these mean/std; HF CLIPModel does NOT normalize
+# the raw tensor itself — applying an ImageNet norm degrades the features).
 CLIP_MEAN: Tuple[float, float, float] = (0.48145466, 0.45782750, 0.40821073)
 CLIP_STD: Tuple[float, float, float]  = (0.26862954, 0.26130258, 0.27577711)
 
@@ -34,12 +34,12 @@ CLIP_STD: Tuple[float, float, float]  = (0.26862954, 0.26130258, 0.27577711)
 def get_norm_for(architecture: str) -> Tuple[
     Tuple[float, float, float], Tuple[float, float, float]
 ]:
-    """
-    Повертає (mean, std) нормалізації відповідно до архітектури.
+"""
+Returns (mean, std) normalizations according to the architecture.
 
-    baseline (EfficientNet-B2, ImageNet) → ImageNet stats;
-    streetclip / geoclip (CLIP backbone)  → CLIP stats.
-    """
+baseline (EfficientNet-B2, ImageNet) → ImageNet stats;
+streetclip / geoclip (CLIP backbone) → CLIP stats.
+"""
     if str(architecture).lower().strip() in ("streetclip", "geoclip",
                                               "street_clip", "geo_clip"):
         return CLIP_MEAN, CLIP_STD
@@ -47,7 +47,7 @@ def get_norm_for(architecture: str) -> Tuple[
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Основні функції трансформацій
+# Main functions of transformations
 # ──────────────────────────────────────────────────────────────────────────────
 
 def get_train_transforms(
@@ -60,26 +60,26 @@ def get_train_transforms(
     std: Tuple[float, float, float] = IMAGENET_STD,
 ) -> transforms.Compose:
     """
-    Побудова пайплайну аугментацій для тренувального набору даних.
+Building an augmentation pipeline for the training dataset.
 
-    Включає:
-      - RandomResizedCrop: вирізання довільної ділянки + масштабування
-      - RandomHorizontalFlip: горизонтальне дзеркалення (50%)
-      - ColorJitter: випадкова зміна яскравості, контрасту, насиченості, тону
-      - RandomGrayscale: конвертація у відтінки сірого (10%)
-      - Нормалізація за статистиками ImageNet
+Includes:
+- RandomResizedCrop: cropping an arbitrary area + scaling
+- RandomHorizontalFlip: horizontal flipping (50%)
+- ColorJitter: random change in brightness, contrast, saturation, hue
+- RandomGrayscale: conversion to grayscale (10%)
+- Normalization using ImageNet statistics
 
-    Аргументи:
-        img_size:              Розмір вихідного зображення (пікселів).
-        color_jitter_strength: Сила ColorJitter (0.0–1.0).
-        grayscale_prob:        Ймовірність конвертації у сірий.
-        random_crop_scale:     Діапазон масштабу вирізання.
-        random_crop_ratio:     Діапазон співвідношення сторін.
-        mean:                  Середні значення для нормалізації.
-        std:                   Стандартні відхилення для нормалізації.
+Arguments:
+img_size: Size of the original image (pixels).
+color_jitter_strength: ColorJitter strength (0.0–1.0).
+grayscale_prob: Probability of conversion to gray.
+random_crop_scale: Crop scale range.
+random_crop_ratio: Aspect ratio range.
+mean: Average values ​​for normalization.
+std: Standard deviations for normalization.
 
-    Повертає:
-        transforms.Compose — пайплайн трансформацій.
+Returns:
+transforms.Compose — transformation pipeline.
     """
     s = color_jitter_strength
     return transforms.Compose([
@@ -91,7 +91,7 @@ def get_train_transforms(
             antialias=True,
         ),
         transforms.RandomHorizontalFlip(p=0.5),
-        # Без вертикального перевертання: вуличні знімки мають чіткий «верх»
+        # No vertical flipping: street shots have a clear “top”
         transforms.ColorJitter(
             brightness=0.8 * s,
             contrast=0.8 * s,
@@ -110,22 +110,22 @@ def get_val_transforms(
     std: Tuple[float, float, float] = IMAGENET_STD,
 ) -> transforms.Compose:
     """
-    Побудова пайплайну трансформацій для валідаційного/тестового набору.
+Build a transformation pipeline for the validation/test set.
 
-    Включає лише детерміновані операції:
-      - Resize до (img_size * 256/224) для наступного CenterCrop
-      - CenterCrop до img_size
-      - Нормалізація за статистиками ImageNet
+Includes only deterministic operations:
+- Resize to (img_size * 256/224) for next CenterCrop
+- CenterCrop to img_size
+- Normalize using ImageNet statistics
 
-    Аргументи:
-        img_size: Розмір вихідного зображення (пікселів).
-        mean:     Середні значення для нормалізації.
-        std:      Стандартні відхилення для нормалізації.
+Arguments:
+img_size: The size of the original image (in pixels).
+mean: The average values ​​to normalize.
+std: The standard deviations to normalize.
 
-    Повертає:
-        transforms.Compose — детермінований пайплайн трансформацій.
+Returns:
+transforms.Compose — a deterministic transformation pipeline.
     """
-    resize_size = int(img_size * 256 / 224)  # ~256 для img_size=224
+    resize_size = int(img_size * 256 / 224)  # ~256 for img_size=224
     return transforms.Compose([
         transforms.Resize(
             resize_size,
@@ -144,20 +144,20 @@ def get_strong_train_transforms(
     std: Tuple[float, float, float] = IMAGENET_STD,
 ) -> transforms.Compose:
     """
-    Посилений пайплайн аугментацій для навчання з підвищеною регуляризацією.
+Enhanced augmentation pipeline for learning with increased regularization.
 
-    Додатково включає:
-      - RandAugment: автоматичний вибір оптимальних аугментацій
-      - RandomErasing: випадкове затирання прямокутних регіонів
-      - Більш агресивний ColorJitter
+Additionally includes:
+- RandAugment: automatic selection of optimal augmentations
+- RandomErasing: random erasing of rectangular regions
+- More aggressive ColorJitter
 
-    Аргументи:
-        img_size: Розмір вихідного зображення.
-        mean:     Середні значення для нормалізації.
-        std:      Стандартні відхилення для нормалізації.
+Arguments:
+img_size: Size of the original image.
+mean: Average values ​​for normalization.
+std: Standard deviations for normalization.
 
-    Повертає:
-        transforms.Compose — посилений пайплайн.
+Returns:
+transforms.Compose — enhanced pipeline.
     """
     return transforms.Compose([
         transforms.RandomResizedCrop(
@@ -189,34 +189,34 @@ def get_tta_transforms(
     std: Tuple[float, float, float] = IMAGENET_STD,
 ) -> list[transforms.Compose]:
     """
-    Test-Time Augmentation (TTA): список трансформацій для ансамблювання під час інференсу.
+Test-Time Augmentation (TTA): A list of transformations to be assembled during inference.
 
-    Генерує n_augmentations варіантів аугментацій із різними налаштуваннями.
-    Першою завжди йде стандартна валідаційна трансформація.
+Generates n_augmentations of augmentation variants with different settings.
+The standard validation transformation is always first.
 
-    Аргументи:
-        img_size:        Розмір вихідного зображення.
-        n_augmentations: Кількість TTA-варіантів.
-        mean:            Середні значення нормалізації.
-        std:             Стандартні відхилення нормалізації.
+Arguments:
+img_size: The size of the original image.
+n_augmentations: The number of TTA variants.
+mean: The average normalization values.
+std: The standard deviations of the normalization.
 
-    Повертає:
-        Список із n_augmentations трансформацій.
+Returns:
+A list of n_augmentations transformations.
     """
     base = get_val_transforms(img_size=img_size, mean=mean, std=std)
     tta_list = [base]
 
-    # Горизонтально дзеркалене зображення
+    # Horizontally mirrored image
     flipped = transforms.Compose([
         transforms.Resize(int(img_size * 256 / 224), interpolation=InterpolationMode.BICUBIC, antialias=True),
         transforms.CenterCrop(img_size),
-        transforms.RandomHorizontalFlip(p=1.0),  # завжди перевертаємо
+        transforms.RandomHorizontalFlip(p=1.0), 
         transforms.ToTensor(),
         transforms.Normalize(mean=list(mean), std=list(std)),
     ])
     tta_list.append(flipped)
 
-    # Злегка відмінні вирізання
+    # Slightly different cuts
     scales = [0.8, 0.85, 0.9]
     for i, scale in enumerate(scales[:n_augmentations - 2]):
         aug = transforms.Compose([
@@ -240,17 +240,17 @@ def denormalize(
     mean: Tuple[float, float, float] = IMAGENET_MEAN,
     std: Tuple[float, float, float] = IMAGENET_STD,
 ) -> torch.Tensor:
-    """
-    Зворотна нормалізація тензора зображення для візуалізації.
+"""
+Reverse normalization of an image tensor for visualization.
 
-    Аргументи:
-        tensor: Нормалізований тензор форми (C, H, W) або (N, C, H, W).
-        mean:   Середні значення нормалізації.
-        std:    Стандартні відхилення нормалізації.
+Arguments:
+tensor: Normalized tensor of form (C, H, W) or (N, C, H, W).
+mean: Mean values ​​of normalization.
+std: Standard deviations of normalization.
 
-    Повертає:
-        Денормалізований тензор у тому ж форматі (значення від 0 до 1).
-    """
+Returns:
+Denormalized tensor in the same format (values ​​from 0 to 1).
+"""
     mean_t = torch.tensor(mean, dtype=tensor.dtype, device=tensor.device)
     std_t  = torch.tensor(std,  dtype=tensor.dtype, device=tensor.device)
 
@@ -267,7 +267,7 @@ def denormalize(
 
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Тест при прямому запуску
+# Direct start test
 # ──────────────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -276,7 +276,7 @@ if __name__ == "__main__":
 
     print("=== Тест аугментацій ===")
 
-    # Створюємо тестове зображення
+    # Create a test image
     dummy_img = Image.fromarray(np.random.randint(0, 255, (480, 640, 3), dtype=np.uint8))
 
     train_tf = get_train_transforms(img_size=224)
@@ -291,7 +291,7 @@ if __name__ == "__main__":
     assert t_val.shape   == (3, 224, 224), f"Невірна форма val: {t_val.shape}"
     assert t_strong.shape == (3, 224, 224), f"Невірна форма strong: {t_strong.shape}"
 
-    # Перевіряємо денормалізацію
+    # Check denormalization
     restored = denormalize(t_val)
     assert restored.min() >= -0.1 and restored.max() <= 1.1, "Денормалізація: значення поза [0,1]"
 
